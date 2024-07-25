@@ -124,43 +124,13 @@
     <material>Gazebo/Blue</material>
   </gazebo>
 
-  <!-- FRONT HORIZONTAL PLATE -->
-
-  <joint name="base_to_front_plate" type="continuous">
-    <parent link="base_link"/>
-    <child link="front_plate"/>
-    <origin xyz="${chassis_length} 0 ${front_plate_height/2 + wheel_radius}"/>
-    <axis xyz="0 0 1"/>
-  </joint>
-
-  <link name="front_plate">
-    <visual>
-      <geometry>
-        <cylinder radius="0.1" length="${front_plate_height}"/>
-      </geometry>
-      <origin xyz="0 0 0"/>
-      <material name="rosy_red"/>
-    </visual>
-    <collision>
-      <geometry>
-        <cylinder radius="0.1" length="${front_plate_height}"/>
-      </geometry>
-      <origin xyz="0 0 0"/>
-    </collision>
-    <xacro:inertial_cylinder mass="0.2" radius="0.1" length="${front_plate_height}"/>
-  </link>
-
-  <gazebo reference="front_plate">
-    <material>Gazebo/Red</material>
-  </gazebo>
-
   <!-- FRONT WHEEL -->
 
-  <joint name="plate_to_front_wheel" type="continuous">
-    <parent link="front_plate"/>
+  <joint name="base_to_front_wheel" type="continuous">
+    <parent link="base_link"/>
     <child link="front_wheel"/>
-    <origin xyz="0 0 ${-front_plate_height/2 - wheel_radius}"/>
-    <axis xyz="0 1 0"/>
+    <origin xyz="${chassis_length} 0 0"/>
+    <axis xyz="0 0 1"/>
   </joint>
 
   <link name="front_wheel">

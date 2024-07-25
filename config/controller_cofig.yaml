@@ -2,7 +2,6 @@ controller_manager:
   ros__parameters:
     update_rate: 30
     use_sim_time: true
-ls
 
     tri_cont:
       type: tricycle_controller/TricycleController
@@ -13,6 +12,6 @@ tri_cont:
   odom_frame_id: "odom"
   wheel_radius: 0.1
   wheelbase: 0.3
-  steering_joint_name: ""
+  steering_joint: ""
   traction_joint_name: ""
   
