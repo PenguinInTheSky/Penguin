@@ -64,6 +64,33 @@
     <material>Gazebo/White</material>
   </gazebo>
 
+  <!-- REAR AXLE -->
+
+  <joint name="base_to_rear_axle" type="fixed">
+    <parent link="base_link"/>
+    <child link="rear_axle"/>
+    <origin rpy="${pi/2} 0 0"/>
+  </joint>
+
+  <link name="rear_axle">
+    <visual>
+      <geometry>
+        <cylinder radius="0.01" length="${chassis_width}"/>
+      </geometry>
+      <material name="rosy_red"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.01" length="${chassis_width}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_cylinder mass="0.1" radius="0.01" length="${chassis_width}"/>
+  </link>
+
+  <gazebo reference="rear_axle">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
   <!-- LEFT WHEEL -->
 
   <joint name="base_to_left_wheel" type="continuous">
