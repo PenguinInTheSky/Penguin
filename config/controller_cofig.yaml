@@ -8,10 +8,10 @@ controller_manager:
 
 tri_cont:
   publish_rate: 30
-  base_frame_id: "base_link"
-  odom_frame_id: "odom"
-  wheel_radius: 0.1
+  traction_joint_name: "traction_joint"
+  steering_joint_name: "steering_joint"
   wheelbase: 0.3
-  steering_joint: ""
-  traction_joint_name: ""
+  wheel_radius: 0.1
+  odom_frame_id: "odom"
+  base_frame_id: "base_link"
   
