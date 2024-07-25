@@ -1,0 +1,215 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="my_robot">
+  <xacro:include filename="inertial_macro.xacro"/>
+
+  <material name="sky_blue">
+    <color rgba="0.25 0.78 1 1"/>
+  </material>
+
+  <material name="white">
+    <color rgba="1 1 1 1"/>
+  </material>
+
+  <material name="leafy_green">
+    <color rgba="0.38 0.8 0.14 1"/>
+  </material>
+
+  <material name="rosy_red">
+    <color rgba="0.66 0.06 0.19 1"/>
+  </material>
+
+  <material name="sunshine">
+    <color rgba="1 1 0 1"/>
+  </material>
+
+  <xacro:property name="chassis_height" value="0.2"/>
+  <xacro:property name="chassis_length" value="0.6"/>
+  <xacro:property name="chassis_width" value="0.3"/>
+
+  <xacro:property name="wheel_radius" value="0.1"/>
+  <xacro:property name="wheel_width" value="0.05"/>
+
+  <xacro:property name="front_plate_height" value="0.02"/>
+ 
+
+  <!-- BASE LINK -->
+
+  <link name="base_link"></link>
+
+
+  <!-- CHASSIS -->
+
+  <joint name="base_to_chassis" type="fixed">
+    <parent link="base_link"/>
+    <child link="chassis"/>
+    <origin xyz="${chassis_length/2} 0 ${chassis_height/2 + wheel_radius}"/>
+  </joint>
+
+  <link name="chassis">
+    <visual>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box mass="2" x="${chassis_length}" y="${chassis_width}" z="${chassis_height}"/>
+  </link>
+
+  <gazebo reference="chassis">
+    <material>Gazebo/White</material>
+  </gazebo>
+
+  <!-- LEFT WHEEL -->
+
+  <joint name="base_to_left_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <origin xyz="0 ${-chassis_width/2} 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="sky_blue"/>
+      <origin rpy="${pi/2} 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin rpy="${pi/2} 0 0"/>
+    </collision>
+    <xacro:inertial_cylinder mass="0.5" radius="${wheel_radius}" length="${wheel_width}"/>
+  </link>
+
+  <gazebo reference="left_wheel">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+
+  <!-- RIGHT WHEEL -->
+
+  <joint name="base_to_right_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="0 ${chassis_width/2} 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="sky_blue"/>
+      <origin rpy="${pi/2} 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin rpy="${pi/2} 0 0"/>
+    </collision>
+    <xacro:inertial_cylinder mass="0.5" radius="${wheel_radius}" length="${wheel_width}"/>
+  </link>
+
+  <gazebo reference="right_wheel">
+    <material>Gazebo/Blue</material>
+  </gazebo>
+
+  <!-- FRONT HORIZONTAL PLATE -->
+
+  <joint name="base_to_front_plate" type="continuous">
+    <parent link="base_link"/>
+    <child link="front_plate"/>
+    <origin xyz="${chassis_length} 0 ${front_plate_height/2 + wheel_radius}"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="front_plate">
+    <visual>
+      <geometry>
+        <cylinder radius="0.1" length="${front_plate_height}"/>
+      </geometry>
+      <origin xyz="0 0 0"/>
+      <material name="rosy_red"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.1" length="${front_plate_height}"/>
+      </geometry>
+      <origin xyz="0 0 0"/>
+    </collision>
+    <xacro:inertial_cylinder mass="0.2" radius="0.1" length="${front_plate_height}"/>
+  </link>
+
+  <gazebo reference="front_plate">
+    <material>Gazebo/Red</material>
+  </gazebo>
+
+  <!-- FRONT WHEEL -->
+
+  <joint name="plate_to_front_wheel" type="continuous">
+    <parent link="front_plate"/>
+    <child link="front_wheel"/>
+    <origin xyz="0 0 ${-front_plate_height/2 - wheel_radius}"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="front_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin rpy="${pi/2} 0 0"/>
+      <material name="sunshine"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin rpy="${pi/2} 0 0"/>
+    </collision>
+    <xacro:inertial_cylinder mass="0.2" radius="${wheel_radius}" length="${wheel_width}"/>
+  </link>
+  
+
+  <gazebo reference="front_wheel">
+    <material>Gazebo/Yellow</material>
+  </gazebo>
+
+  <!-- VACUUM HEAD -->
+
+  <joint name="chassis_to_vacuum_head" type="fixed">
+    <parent link="chassis"/>
+    <child link="vacuum_head"/>
+    <origin xyz="0 0 ${-chassis_height/2 - wheel_radius * 2 + 0.05/2}"/>
+  </joint>
+
+  <link name="vacuum_head">
+    <visual>
+      <geometry>
+        <box size="0.1 0.3 0.05"/>
+      </geometry>
+      <material name="leafy_green"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.1 0.3 0.05"/>
+      </geometry>
+    </collision>
+    <xacro:inertial_box mass="0.1" x="0.1" y="0.3" z="0.05"/>
+  </link>
+
+  <gazebo reference="vacuum_head">
+    <material>Gazebo/Green</material>
+  </gazebo>
+
+</robot>
