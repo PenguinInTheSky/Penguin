@@ -1,0 +1,17 @@
+---
+controller_manager:
+  ros__parameters:
+    update_rate: 30
+    tri_cont:
+      type: tricycle_controller/TricycleController
+
+tri_cont:
+  ros__parameters:
+    publish_rate: 30
+    traction_joint_name: 'traction_joint'
+    steering_joint_name: 'steering_joint'
+    wheelbase: 0.3
+    wheel_radius: 0.1
+    odom_frame_id: odom
+    base_frame_id: base_link
+    steering_angle_limit: 0.5
