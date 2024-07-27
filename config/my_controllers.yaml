@@ -15,3 +15,4 @@ tri_cont:
     odom_frame_id: odom
     base_frame_id: base_link
     steering_angle_limit: 0.5
+    use_stamped_vel: false

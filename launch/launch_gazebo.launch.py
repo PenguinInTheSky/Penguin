@@ -36,8 +36,15 @@ def generate_launch_description():
       output='screen'
     )
 
+    tri_cont_spawner = Node(
+      package='controller_manager',
+      executable='spawner',
+      arguments=["tri_cont"]
+    )
+
     return LaunchDescription([
       rsp,
       gazebo,
-      spawn_entity
+      spawn_entity,
+      tri_cont_spawner
     ])
