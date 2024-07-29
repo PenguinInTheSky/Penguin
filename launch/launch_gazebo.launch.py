@@ -28,7 +28,6 @@ def generate_launch_description():
         launch_arguments={'extra_gazebo_args': '--ros-args --param-file ' + gazebo_params_path}.items()
     )
 
-
     spawn_entity = Node(
       package='gazebo_ros',
       executable='spawn_entity.py',
@@ -42,9 +41,16 @@ def generate_launch_description():
       arguments=["tri_cont"]
     )
 
+    joint_broadcaster_spawner = Node(
+      package='controller_manager',
+      executable='spawner',
+      arguments=["joint_broad"]
+    )
+
     return LaunchDescription([
       rsp,
       gazebo,
       spawn_entity,
-      tri_cont_spawner
+      tri_cont_spawner,
+      joint_broadcaster_spawner
     ])

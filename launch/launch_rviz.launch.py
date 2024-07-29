@@ -31,8 +31,7 @@ def generate_launch_description():
       package='rviz2',
       executable='rviz2',
       name='rviz2',
-      output='screen',
-      arguments=['-d',rviz_config_file]
+      output='screen'
     )
 
     publish_joint_state_gui = Node(

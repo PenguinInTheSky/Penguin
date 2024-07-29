@@ -4,6 +4,8 @@ controller_manager:
     update_rate: 30
     tri_cont:
       type: tricycle_controller/TricycleController
+    joint_broad:
+      type: joint_state_broadcaster/JointStateBroadcaster
 
 tri_cont:
   ros__parameters:
@@ -12,7 +14,8 @@ tri_cont:
     steering_joint_name: 'steering_joint'
     wheelbase: 0.3
     wheel_radius: 0.1
-    odom_frame_id: odom
-    base_frame_id: base_link
+    odom_frame_id: 'odom'
+    base_frame_id: 'base_link'
+    enable_odom_tf: true
     steering_angle_limit: 0.5
     use_stamped_vel: false
