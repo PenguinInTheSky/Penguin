@@ -184,32 +184,5 @@
   <gazebo reference="front_wheel">
     <material>Gazebo/Yellow</material>
   </gazebo>
-  
-  <!-- VACUUM HEAD -->
-
-  <joint name="chassis_to_vacuum_head" type="fixed">
-    <parent link="chassis"/>
-    <child link="vacuum_head"/>
-    <origin xyz="0 0 ${-chassis_height/2 - wheel_radius * 2 + 0.05/2}"/>
-  </joint>
-
-  <link name="vacuum_head">
-    <visual>
-      <geometry>
-        <box size="0.1 0.3 0.05"/>
-      </geometry>
-      <material name="leafy_green"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="0.1 0.3 0.05"/>
-      </geometry>
-    </collision>
-    <xacro:inertial_box mass="0.1" x="0.1" y="0.3" z="0.05"/>
-  </link>
-
-  <gazebo reference="vacuum_head">
-    <material>Gazebo/Green</material>
-  </gazebo>
 
 </robot>

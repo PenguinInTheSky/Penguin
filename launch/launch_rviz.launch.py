@@ -19,7 +19,7 @@ def generate_launch_description():
     package_name = "Penguin"
     
     # Get path to the rviz config file
-    rviz_config_file = os.path.join(get_package_share_directory('Penguin'),'config','Penguin.rviz')
+    rviz_config_file = os.path.join(get_package_share_directory('Penguin'),'config','view.rviz')
 
     publish_state = IncludeLaunchDescription(
       PythonLaunchDescriptionSource([
