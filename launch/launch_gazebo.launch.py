@@ -47,10 +47,16 @@ def generate_launch_description():
       arguments=["joint_broad"]
     )
 
+    driver = Node(
+      package='Penguin',
+      executable='drive_node.py'
+    )
+
     return LaunchDescription([
       rsp,
       gazebo,
       spawn_entity,
       tri_cont_spawner,
-      joint_broadcaster_spawner
+      joint_broadcaster_spawner,
+      driver
     ])
