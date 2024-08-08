@@ -13,7 +13,7 @@ class RobotDriver(Node):
 
   def timer_callback(self):
     msg = Twist()
-    msg.linear.x = 0.5
+    msg.linear.x = 1.0
     msg.angular.z = 0.0
     self.publisher_.publish(msg)
     self.get_logger().info('Publishing: "%s"' % msg)
