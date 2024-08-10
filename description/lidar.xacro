@@ -39,7 +39,7 @@
         </scan>
         <range>
           <min>0.05</min>
-          <max>100</max>
+          <max>2</max>
         </range>
       </ray>
       <plugin name="laser_controller" filename="libgazebo_ros_ray_sensor.so">
