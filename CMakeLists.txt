@@ -27,7 +27,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-install(DIRECTORY launch description config worlds scripts Penguin
+install(DIRECTORY launch description config worlds scripts Penguin maps
   DESTINATION share/${PROJECT_NAME}
 )
 

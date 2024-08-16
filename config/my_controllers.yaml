@@ -16,5 +16,4 @@ diff_cont:
     wheel_radius: 0.1
     odom_frame_id: 'odom'
     base_frame_id: 'base_link'
-    enable_odom_tf: true
     use_stamped_vel: false

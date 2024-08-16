@@ -49,7 +49,7 @@
   <joint name="left_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="left_wheel"/>
-    <origin xyz="${chassis_length} ${-chassis_width/2} ${wheel_radius}"/>
+    <origin xyz="${chassis_length/3} ${chassis_width/2} ${wheel_radius}"/>
     <axis xyz="0 1 0"/>
   </joint>
 
@@ -79,7 +79,7 @@
   <joint name="right_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="right_wheel"/>
-    <origin xyz="${chassis_length} ${chassis_width/2} ${wheel_radius}"/>
+    <origin xyz="${chassis_length/3} ${-chassis_width/2} ${wheel_radius}"/>
     <axis xyz="0 1 0"/>
   </joint>
 
@@ -109,7 +109,7 @@
   <joint name="caster_wheel_joint" type="fixed">
     <parent link="base_link"/>
     <child link="caster_wheel"/>
-    <origin xyz="${chassis_length/3} 0 ${wheel_radius}"/>
+    <origin xyz="${3*chassis_length/4} 0 ${wheel_radius}"/>
   </joint>
 
   <link name="caster_wheel">
@@ -126,6 +126,12 @@
     </collision>
     <xacro:inertial_sphere mass="0.1" radius="${wheel_radius}"/>
   </link>
+
+  <gazebo reference="caster_wheel">
+    <material>Gazebo/Yellow</material>
+    <mu1 value="0.000"/>
+    <mu2 value="0.000"/>
+  </gazebo>
 
   <!-- FRONT PLATE -->
 
