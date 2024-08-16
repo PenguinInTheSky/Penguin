@@ -32,13 +32,13 @@
       <ray>
         <scan>
           <horizontal>
-            <sample>360</sample>
-            <min_angle>-3.14</min_angle>
-            <max_angle>3.14</max_angle>
+            <sample>180</sample>
+            <min_angle>-1.57</min_angle>
+            <max_angle>1.57</max_angle>
           </horizontal>
         </scan>
         <range>
-          <min>0.05</min>
+          <min>0.1</min>
           <max>2</max>
         </range>
       </ray>

@@ -35,10 +35,10 @@ def generate_launch_description():
       output='screen'
     )
 
-    tri_cont_spawner = Node(
+    diff_cont_spawner = Node(
       package='controller_manager',
       executable='spawner',
-      arguments=["tri_cont"]
+      arguments=["diff_cont"]
     )
 
     joint_broadcaster_spawner = Node(
@@ -56,7 +56,6 @@ def generate_launch_description():
       rsp,
       gazebo,
       spawn_entity,
-      tri_cont_spawner,
-      joint_broadcaster_spawner,
-      driver
+      diff_cont_spawner,
+      joint_broadcaster_spawner
     ])
