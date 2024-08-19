@@ -14,6 +14,7 @@ diff_cont:
     right_wheel_names: ['right_wheel_joint']
     wheel_separation: 0.6
     wheel_radius: 0.1
+    enable_odom_tf: true
     odom_frame_id: 'odom'
     base_frame_id: 'base_link'
     use_stamped_vel: false
