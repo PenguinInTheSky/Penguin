@@ -37,44 +37,89 @@ class RobotDriver(Node):
   def __init__(self):
     super().__init__('robot_driver')
     self.publisher_ = self.create_publisher(Twist, 'tri_cont/cmd_vel', 10)
+    self.timer = self.create_timer(0.1, self.move)
+
+  # is left side of the robot on the map, not relatively to the robot, unvisited
+  def is_left_side_unvisited(self):
+    return False
+
+  def is_facing_left(self):
+    return None
+  
+
+  # is right side of the robot on the map, not relatively to the robot, unvisited
+  def is_right_side_unvisited(self):
+    return False
+  
+  def is_facing_right(self):
+    return None
+  
+
+  def face_left(self):
+    return None
+  
+  def face_right(self):
+    return None
+  
+  def face_ahead(self):
+    return None
+    
+  def move_left_unvisited(self):
+    if not self.is_facing_left():
+      self.face_left()
+    if not self.blocked_ahead():
+      self.move_ahead()
+    else:
+      self.face_ahead()
 
   def move_ahead(self):
     msg = Twist()
     msg.linear.x = 1.0
     msg.angular.z = 0.0
     self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)
-
+    self.get_logger().info('Publishing: "%s"' % msg)  
+  
   def change_line(self):
-    msg = Twist()
-    msg.angular.z = math.pi / 2
-    self.publisher_.publish(msg)
-    msg = Twist()
-    msg.linear.y = 1.0
-    self.publisher_.publish(msg)
-    msg = Twist()
-    msg.angular.z = math.pi / 2
-    self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)
+    self.face_right()
+    self.move_ahead()
+    self.face_right()
+    
+  def move_backward():
+    return None
 
 
-def blocked_ahead(distance):
-  return None
+  def move(self):
+    if self.is_left_side_unvisited():
+      self.move_left_unvisited()
+    elif not self.blocked_ahead():
+      self.move_ahead()
+    elif self.is_right_side_unvisited():
+      self.change_line()
+    else:
+      self.move_backward()
+    return None
+  
+    
+  def face_right(self):
+    return None
 
-def move_forward():
-  return None
+  def blocked_ahead(distance):
+    return None
 
-def next_line():
-  return None
+  def move_forward():
+    return None
 
-def go_to_starting_position():
-  return None
+  def next_line():
+    return None
 
-def finish():
-  return None
+  def go_to_starting_position():
+    return None
 
-def current_pose():
-  return None
+  def finish():
+    return None
+
+  def current_pose():
+    return None
 
 
 # get map
