@@ -7,7 +7,7 @@ from geometry_msgs.msg import Twist
 class RobotDriver(Node):
   def __init__(self):
     super().__init__('robot_driver')
-    self.publisher_ = self.create_publisher(Twist, 'tri_cont/cmd_vel', 10)
+    self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel', 10)
     self.time_period = 0.1
     self.timer = self.create_timer(self.time_period, self.timer_callback)
 
@@ -27,3 +27,5 @@ def main(args = None):
 
 if __name__ == '__main__':
   main()
+
+  

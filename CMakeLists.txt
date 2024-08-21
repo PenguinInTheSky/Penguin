@@ -32,7 +32,7 @@ install(DIRECTORY launch description config worlds scripts Penguin maps
 )
 
 install(PROGRAMS
-  scripts/drive_node.py
+  scripts/controle.py
   DESTINATION lib/${PROJECT_NAME}
 )
 ament_package()

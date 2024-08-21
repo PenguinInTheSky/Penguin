@@ -49,7 +49,7 @@ def generate_launch_description():
 
     driver = Node(
       package='Penguin',
-      executable='drive_node.py'
+      executable='controle.py'
     )
 
     return LaunchDescription([
@@ -57,5 +57,6 @@ def generate_launch_description():
       gazebo,
       spawn_entity,
       diff_cont_spawner,
-      joint_broadcaster_spawner
+      joint_broadcaster_spawner,
+      driver
     ])
