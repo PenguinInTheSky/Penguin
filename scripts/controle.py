@@ -7,7 +7,7 @@ from ament_index_python.packages import get_package_share_directory
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Pose
 from scipy.spatial.transform import Rotation
 import math
 
@@ -15,6 +15,7 @@ UNKNOWN = 205
 EMPTY = 254
 OCCUPIED = 0
 
+current_pose = Pose()
 
 class AmclPoseListener(Node):
   def __init__(self):
@@ -26,14 +27,8 @@ class AmclPoseListener(Node):
       10
     )
   def pose_callback(self, msg):
-    position = msg.pose.pose.position
-    self.get_logger().info(f'Position: x={position.x}, y={position.y}, z={position.z}')
-
-    orientation = msg.pose.pose.orientation
-    rotation = Rotation.from_quat(orientation)
-    roll, pitch, yaw = rotation.as_euler('xyz', degrees=False)
-    
-    self.get_logger().info(f'Orientation: roll={roll}, pitch={pitch}, yaw={yaw}')
+    current_pose = msg.pose.pose
+    self.get_logger().info('Current pose is: "%s"' % current_pose)
 
 class RobotDriver(Node):
   def __init__(self):
@@ -120,11 +115,15 @@ class RobotDriver(Node):
   # def finish():
   #   return None
 
-  # def current_pose():
-  #   return None
+  def current_orientation(self):
+    return Rotation.from_quat(current_pose.orientation).as_euler('xyz', degrees = False)
 
+  def current_position(self):
+    return current_pose.position
+  
+  
   def move(self):
-    self.move_backward()
+    return None
     # if self.is_left_side_unvisited():
     #   self.move_left_unvisited()
     # elif not self.blocked_ahead():
@@ -136,20 +135,26 @@ class RobotDriver(Node):
   
 def main(args=None):
     rclpy.init(args=args)
-    node = RobotDriver()
-    print("starting node")
-    rclpy.spin(node)
-    node.destroy_node()
+    driver = RobotDriver()
+    pose_subscriber = AmclPoseListener()
+    rclpy.spin(driver)
+    rclpy.spin(pose_subscriber)
+    driver.destroy_node()
+    pose_subscriber.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
 
 # get map
-# pkg_path = os.path.join(get_package_share_directory('Penguin'))
-# pgm_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.pgm')
-# image = Image.open(pgm_file)
-# image_array = numpy.array(image)
+pkg_path = os.path.join(get_package_share_directory('Penguin'))
+pgm_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.pgm')
+
+image = Image.open(pgm_file)
+image_array = numpy.array(image)
+
+visited = numpy.zeros({image.size.x, image.size.y})
+
 # print(f"Image size: {image.size}")
 # print(f"Image mode: {image.mode}")
 # print("Pixel data:")
