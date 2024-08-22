@@ -91,6 +91,7 @@ class RobotDriver(Node):
     self.mark_visited()
     self.print_visited_map()
     self.real_to_map_position(self.current_position())
+    self.get_logger().info('Left_side_unvisited is "%s' % self.is_left_side_unvisited())
     self.get_logger().info('Current pose is: "%s"' % self.current_pose)
 
   def get_message(self, x, y, z, roll, pitch, yaw):
@@ -117,8 +118,6 @@ class RobotDriver(Node):
   def mark_visited(self):
     MAP_COMFORT_RADIUS = int(ROBOT_COMFORT_RADIUS / map_resolution)
     robot_x, robot_y = self.real_to_map_position(self.current_position())
-    # self.get_logger().info('Robot map x: "%.2f"' % robot_x)
-    # self.get_logger().info('Robot map y: "%.2f"' % robot_y)
     for x in range (robot_x - MAP_COMFORT_RADIUS, robot_x + MAP_COMFORT_RADIUS):
       for y in range (robot_y - MAP_COMFORT_RADIUS, robot_y + MAP_COMFORT_RADIUS):
         visited[x, y] = True
@@ -135,11 +134,12 @@ class RobotDriver(Node):
         file.write('\n')
       file.close()
 
-  # # is left side of the robot on the map, not relatively to the robot, unvisited
+  # is left side of the robot on the map, not relatively to the robot, unvisited
   def is_left_side_unvisited(self):
-    left_pose = (self.current_position()[0], self.current_position()[1] + ROBOT_COMFORT_RADIUS)
+    left_pose = self.current_position()
+    left_pose.y += ROBOT_COMFORT_RADIUS
     left_map = self.real_to_map_position(left_pose)
-    return visited[left_map[0], left_map[1]]
+    return not visited[left_map[0], left_map[1] - 1]
 
   # def is_facing_left(self):
   #   return None
@@ -211,7 +211,7 @@ class RobotDriver(Node):
   
   def move(self):
     return None
-    self.move_ahead()
+    # self.move_ahead()
     # if self.is_left_side_unvisited():
     #   self.move_left_unvisited()
     # elif not self.blocked_ahead():
