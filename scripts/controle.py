@@ -15,6 +15,8 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
+ROBOT_COMFORT_RADIUS = 0.8
+
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
 pgm_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.pgm')
@@ -33,7 +35,6 @@ map_resolution = map_info['resolution']
 
 visited = numpy.zeros([map_width, map_height], dtype = bool)
 
-current_pose = Pose()
 
 class InitialPosePublisher(Node):
   def __init__(self):
@@ -44,8 +45,8 @@ class InitialPosePublisher(Node):
     initial_pose.header.stamp = self.get_clock().now().to_msg()
     initial_pose.header.frame_id = 'map'
 
-    initial_pose.pose.pose.position.x = map_origin[0] * map_resolution
-    initial_pose.pose.pose.position.y = map_origin[1] * map_resolution
+    initial_pose.pose.pose.position.x = 0.0
+    initial_pose.pose.pose.position.y = 0.0
     initial_pose.pose.pose.position.z = 0.0
 
     # Set the initial orientation (as a quaternion)
@@ -75,11 +76,17 @@ class RobotDriver(Node):
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
     self.moving_rate = 1.0
     self.timer = self.create_timer(self.moving_rate, self.move)
+
+    self.current_pose = Pose()
+
     self.get_logger().info("Created robot driver")
 
   def pose_callback(self, msg):
-    current_pose = msg.pose.pose
-    self.get_logger().info('Current pose is: "%s"' % current_pose)
+    self.current_pose = msg.pose.pose
+    # self.mark_visited()
+    # self.print_visited_map()
+    self.real_to_map_position(self.current_position())
+    self.get_logger().info('Current pose is: "%s"' % self.current_pose)
 
   def get_message(self, x, y, z, roll, pitch, yaw):
     msg = Twist()
@@ -102,9 +109,30 @@ class RobotDriver(Node):
     self.publisher_.publish(msg)
     self.get_logger().info('Publishing: "%s"' % msg)
   
+  def mark_visited(self):
+    MAP_COMFORT_RADIUS = int(ROBOT_COMFORT_RADIUS / map_resolution)
+    robot_x, robot_y = self.real_to_map_position(self.current_position())
+    # self.get_logger().info('Robot map x: "%.2f"' % robot_x)
+    # self.get_logger().info('Robot map y: "%.2f"' % robot_y)
+    for x in range (robot_x - MAP_COMFORT_RADIUS, robot_x + MAP_COMFORT_RADIUS):
+      for y in range (robot_y - MAP_COMFORT_RADIUS, robot_y + MAP_COMFORT_RADIUS):
+        visited[x, y] = True
+  
+  # DEBUG
+  def print_visited_map(self):
+    for x in range(0, map_width):
+      for y in range(0, map_height):
+        if(visited[x, y]):
+          print(1, end = "")
+        else:
+          print(0, end="")
+      print("\n")
+
   # # is left side of the robot on the map, not relatively to the robot, unvisited
-  # def is_left_side_unvisited(self):
-  #   return False
+  def is_left_side_unvisited(self):
+    left_pose = (self.current_position()[0], self.current_position()[1] + ROBOT_COMFORT_RADIUS)
+    left_map = self.real_to_map_position(left_pose)
+    return visited[left_map[0], left_map[1]]
 
   # def is_facing_left(self):
   #   return None
@@ -160,15 +188,18 @@ class RobotDriver(Node):
   #   return None
 
   def current_orientation(self):
-    return Rotation.from_quat(current_pose.orientation).as_euler('xyz', degrees = False)
+    return Rotation.from_quat(self.current_pose.orientation).as_euler('xyz', degrees = False)
 
   def current_position(self):
-    return current_pose.position
+    return self.current_pose.position
   
-  def get_map_position(self):
-    pos = self.current_orientation()
-    x = int((pos.x - map_origin.x) * map_resolution)
-    y = int((pos.y - map_origin.y) * map_resolution)
+  def real_to_map_position(self, pos):
+    self.get_logger().info('Robot x: "%.2f"' % pos.x)
+    self.get_logger().info('Robot y: "%.2f"' % pos.y)
+    x = int((pos.x - map_origin[0]) / map_resolution)
+    y = map_height - int((pos.y - map_origin[1]) / map_resolution)
+    self.get_logger().info('Robot map x: "%.2f"' % x)
+    self.get_logger().info('Robot map y: "%.2f"' % y)
     return (x, y)
   
   def move(self):
