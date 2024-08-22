@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import yaml
 from PIL import Image
 import numpy
 import os
@@ -11,32 +12,74 @@ from geometry_msgs.msg import PoseWithCovarianceStamped, Pose
 from scipy.spatial.transform import Rotation
 import math
 
-UNKNOWN = 205
+BLOCKED = 0
 EMPTY = 254
-OCCUPIED = 0
+
+# get map
+pkg_path = os.path.join(get_package_share_directory('Penguin'))
+pgm_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.pgm')
+
+image = Image.open(pgm_file)
+image_array = numpy.array(image)
+
+yaml_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.yaml')
+with open(yaml_file, 'r') as file:
+  map_info = yaml.safe_load(file)
+
+map_width, map_height = image.size
+
+map_origin = map_info['origin']
+map_resolution = map_info['resolution']
+
+visited = numpy.zeros([map_width, map_height], dtype = bool)
 
 current_pose = Pose()
 
-class AmclPoseListener(Node):
+class InitialPosePublisher(Node):
   def __init__(self):
-    super().__init__('amcl_pose_listener')
+    super().__init__('initial_pose_publisher')
+    self.publisher_ = self.create_publisher(PoseWithCovarianceStamped, 'initialpose', 1)
+    
+    initial_pose = PoseWithCovarianceStamped()
+    initial_pose.header.stamp = self.get_clock().now().to_msg()
+    initial_pose.header.frame_id = 'map'
+
+    initial_pose.pose.pose.position.x = map_origin[0] * map_resolution
+    initial_pose.pose.pose.position.y = map_origin[1] * map_resolution
+    initial_pose.pose.pose.position.z = 0.0
+
+    # Set the initial orientation (as a quaternion)
+    initial_pose.pose.pose.orientation.x = 0.0
+    initial_pose.pose.pose.orientation.y = 0.0
+    initial_pose.pose.pose.orientation.z = 0.0
+    initial_pose.pose.pose.orientation.w = 1.0
+
+    # Set the covariance (this example assumes some default values)
+    initial_pose.pose.covariance = [0.0] * 36  # Modify covariance as needed
+
+    # Publish the initial pose
+    self.publisher_.publish(initial_pose)
+    self.get_logger().info('Initial pose published.')
+    
+class RobotDriver(Node):
+  def __init__(self):
+    super().__init__('robot_driver')
+
     self.subscription = self.create_subscription(
       PoseWithCovarianceStamped,
       '/amcl_pose',
       self.pose_callback,
       10
     )
-  def pose_callback(self, msg):
-    current_pose = msg.pose.pose
-    self.get_logger().info('Current pose is: "%s"' % current_pose)
 
-class RobotDriver(Node):
-  def __init__(self):
-    super().__init__('robot_driver')
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
     self.moving_rate = 1.0
     self.timer = self.create_timer(self.moving_rate, self.move)
+    self.get_logger().info("Created robot driver")
 
+  def pose_callback(self, msg):
+    current_pose = msg.pose.pose
+    self.get_logger().info('Current pose is: "%s"' % current_pose)
 
   def get_message(self, x, y, z, roll, pitch, yaw):
     msg = Twist()
@@ -52,6 +95,7 @@ class RobotDriver(Node):
     msg = self.get_message(1/self.moving_rate, 0.0, 0.0, 0.0, 0.0, 0.0)
     self.publisher_.publish(msg)
     self.get_logger().info('Publishing: "%s"' % msg)
+    self.get_logger().info('Position: "%s"' % self.current_position())
 
   def move_backward(self):
     msg = self.get_message(-1/self.moving_rate, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -121,9 +165,15 @@ class RobotDriver(Node):
   def current_position(self):
     return current_pose.position
   
+  def get_map_position(self):
+    pos = self.current_orientation()
+    x = int((pos.x - map_origin.x) * map_resolution)
+    y = int((pos.y - map_origin.y) * map_resolution)
+    return (x, y)
   
   def move(self):
     return None
+    self.move_ahead()
     # if self.is_left_side_unvisited():
     #   self.move_left_unvisited()
     # elif not self.blocked_ahead():
@@ -135,25 +185,31 @@ class RobotDriver(Node):
   
 def main(args=None):
     rclpy.init(args=args)
+
+    initial_pose_publisher = InitialPosePublisher()
+    rclpy.spin_once(initial_pose_publisher, timeout_sec=2.0)
+
     driver = RobotDriver()
-    pose_subscriber = AmclPoseListener()
     rclpy.spin(driver)
-    rclpy.spin(pose_subscriber)
+    
+    initial_pose_publisher.destroy_node()
     driver.destroy_node()
-    pose_subscriber.destroy_node()
+
     rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
 
-# get map
-pkg_path = os.path.join(get_package_share_directory('Penguin'))
-pgm_file = os.path.join(pkg_path, 'maps', 'small_room', 'small_room_saved.pgm')
-
-image = Image.open(pgm_file)
-image_array = numpy.array(image)
-
-visited = numpy.zeros({image.size.x, image.size.y})
+# for x in range(0, 156):
+#   for y in range(0, 102):
+#     pixel = image.getpixel((x, y))
+#     to_print = "E"
+#     if pixel == EMPTY:
+#       to_print = "o"
+#     elif pixel != BLOCKED :
+#       to_print = "?"
+#     print(to_print, end = "")
+#   print("\n")
 
 # print(f"Image size: {image.size}")
 # print(f"Image mode: {image.mode}")
