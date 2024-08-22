@@ -15,7 +15,7 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.8
+ROBOT_COMFORT_RADIUS = 0.7
 
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
@@ -35,6 +35,11 @@ map_resolution = map_info['resolution']
 
 visited = numpy.zeros([map_width, map_height], dtype = bool)
 
+for x in range(0, map_width):
+  for y in range(0, map_height):
+    pixel = image.getpixel((x, y))
+    if pixel != EMPTY:
+      visited[x, y] = True
 
 class InitialPosePublisher(Node):
   def __init__(self):
@@ -83,8 +88,8 @@ class RobotDriver(Node):
 
   def pose_callback(self, msg):
     self.current_pose = msg.pose.pose
-    # self.mark_visited()
-    # self.print_visited_map()
+    self.mark_visited()
+    self.print_visited_map()
     self.real_to_map_position(self.current_position())
     self.get_logger().info('Current pose is: "%s"' % self.current_pose)
 
@@ -120,13 +125,15 @@ class RobotDriver(Node):
   
   # DEBUG
   def print_visited_map(self):
-    for x in range(0, map_width):
-      for y in range(0, map_height):
-        if(visited[x, y]):
-          print(1, end = "")
-        else:
-          print(0, end="")
-      print("\n")
+    with open('visited_map.txt', 'w') as file:
+      for x in range(0, map_width):
+        for y in range(0, map_height):
+          if(visited[x, y]):
+            file.write('1')
+          else:
+            file.write('0')
+        file.write('\n')
+      file.close()
 
   # # is left side of the robot on the map, not relatively to the robot, unvisited
   def is_left_side_unvisited(self):
@@ -231,16 +238,6 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-# for x in range(0, 156):
-#   for y in range(0, 102):
-#     pixel = image.getpixel((x, y))
-#     to_print = "E"
-#     if pixel == EMPTY:
-#       to_print = "o"
-#     elif pixel != BLOCKED :
-#       to_print = "?"
-#     print(to_print, end = "")
-#   print("\n")
 
 # print(f"Image size: {image.size}")
 # print(f"Image mode: {image.mode}")
