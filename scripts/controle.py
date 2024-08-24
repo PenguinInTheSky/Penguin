@@ -15,8 +15,8 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 1
-ROBOT_COVER_RADIUS = 0.7
+ROBOT_COMFORT_RADIUS = 0.6
+ROBOT_COVER_RADIUS = 0.3
 
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
@@ -81,12 +81,12 @@ class RobotDriver(Node):
     )
 
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
-    self.publish_rate = 1
+    self.publish_rate = 0.01
     self.timer = self.create_timer(self.publish_rate, self.move)
     self.current_pose = Pose()
     self.frozen = False
     self.angular_velocity = math.pi/6
-    self.angular_precision = 0.03
+    self.angular_precision = 0.05
     self.linear_velocity = 0.7
 
     self.get_logger().info("Created robot driver")
@@ -99,7 +99,7 @@ class RobotDriver(Node):
     self.get_logger().info('Robot blocked ahead is %s"' %self.blocked_ahead())
     # self.get_logger().info('Left_side_unvisited is "%s' % self.is_left_side_unvisited())
     # self.get_logger().info('Current posing is: "%s"' % self.current_position())
-    # self.get_logger().info('Current orientation is: "%s"' % self.current_orientation())
+    self.get_logger().info('Current orientation is: "%s"' % self.current_orientation())
 
   def get_message(self, x, y, z, roll, pitch, yaw):
     msg = Twist()
@@ -175,11 +175,11 @@ class RobotDriver(Node):
   def is_left_side_unvisited(self):
     current_pose = self.current_position()
     left_map = self.real_to_map_position(self.pos_to_tuple(current_pose))
-    self.get_logger().info('Map position "%s "%s"' %(left_map[0], left_map[1]))
-    left_map = (left_map[0], int(left_map[1] - ROBOT_COMFORT_RADIUS * map_resolution))
-    self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
-    self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
-    return not self.is_out_of_bound and not visited[left_map[0], left_map[1] - 1]
+    # self.get_logger().info('Map position "%s "%s"' %(left_map[0], left_map[1]))
+    left_map = (left_map[0], int(left_map[1] - ROBOT_COMFORT_RADIUS / map_resolution))
+    # self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
+    # self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
+    return not self.is_out_of_bound((left_map[0], left_map[1] - 1)) and not visited[left_map[0], left_map[1] - 1]
 
   def is_facing_left(self):
     return self.equal_floats(math.pi/2, self.current_orientation()[2], self.angular_precision)
@@ -189,28 +189,14 @@ class RobotDriver(Node):
     self.publisher_.publish(msg)
     self.get_logger().info('Publishing: "%s"' % msg)
   
-  # def face_right(self):
-  #   return None
-  
-  # def face_ahead(self):
-  #   return None
-
-  
-  # # is right side of the robot on the map, not relatively to the robot, unvisited
-  # def is_right_side_unvisited(self):
-  #   return False
-  
-  # def is_facing_right(self):
-  #   return None
-  
     
   def move_left_unvisited(self):
     if not self.is_facing_left():
       self.turn()
+    elif not self.blocked_ahead():
+      self.move_ahead()
     else:
       self.freeze()
-    # elif not self.blocked_ahead():
-    #   self.move_ahead()
     # else:
     #   self.face_ahead()
 
@@ -395,10 +381,9 @@ class RobotDriver(Node):
     return (pos.x, pos.y)
   
   def move(self):
-    return
-    self.map_print_inspecting_zone()
-    return
-    if not self.blocked_ahead():
+    if self.is_left_side_unvisited():
+      self.move_left_unvisited()
+    elif not self.blocked_ahead():
       self.move_ahead()
     else:
       self.freeze()
@@ -433,6 +418,20 @@ class RobotDriver(Node):
   #   return None
 
   # def finish():
+  #   return None
+  
+  # def face_right(self):
+  #   return None
+  
+  # def face_ahead(self):
+  #   return None
+
+  
+  # # is right side of the robot on the map, not relatively to the robot, unvisited
+  # def is_right_side_unvisited(self):
+  #   return False
+  
+  # def is_facing_right(self):
   #   return None
 
 def pretty_print_position(pos):
