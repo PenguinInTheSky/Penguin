@@ -15,8 +15,8 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.7
-ROBOT_COVER_RADIUS = 0.5
+ROBOT_COMFORT_RADIUS = 1
+ROBOT_COVER_RADIUS = 0.7
 
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
@@ -96,6 +96,7 @@ class RobotDriver(Node):
     self.mark_visited()
     self.print_visited_map()
     self.real_to_map_position(self.pos_to_tuple(self.current_position()))
+    self.get_logger().info('Robot blocked ahead is %s"' %self.blocked_ahead())
     # self.get_logger().info('Left_side_unvisited is "%s' % self.is_left_side_unvisited())
     # self.get_logger().info('Current posing is: "%s"' % self.current_position())
     # self.get_logger().info('Current orientation is: "%s"' % self.current_orientation())
@@ -111,7 +112,7 @@ class RobotDriver(Node):
     return msg
 
   def is_out_of_bound(self, pos):
-    return pos[0] < 0 or pos[1] < 0 or pos[0] > map_width or pos[1] > map_height
+    return pos[0] < 0 or pos[1] < 0 or pos[0] >= map_width or pos[1] >= map_height
   
   # return true if 2 floats are equal to a certain precision
   def equal_floats(self, float_main, float_other, precision):
@@ -161,8 +162,8 @@ class RobotDriver(Node):
   # DEBUG
   def print_visited_map(self):
     with open('visited_map.txt', 'w') as file:
-      for y in range(0, map_height):
-        for x in range(0, map_width):
+      for x in range(map_width - 1, -1, -1):
+        for y in range(0, map_height):
           if(visited[x, y]):
             file.write('1')
           else:
@@ -214,15 +215,17 @@ class RobotDriver(Node):
     #   self.face_ahead()
 
   def get_real_position_ahead(self, pos, distance, theta):
+    print(math.cos(theta))
+    print(math.sin(theta))
     new_x = pos[0] + math.cos(theta) * distance
     new_y = pos[1] + math.sin(theta) * distance
     return (new_x, new_y)
   
   def get_real_position_left(self, pos, distance, theta):
-    return self.get_position_ahead(pos, distance, theta + math.pi/2)
+    return self.get_real_position_ahead(pos, distance, theta + math.pi/2)
   
   def get_real_position_right(self, pos, distance, theta):
-    return self.get_position_ahead(pos, distance, theta - math.pi/2)
+    return self.get_real_position_ahead(pos, distance, theta - math.pi/2)
 
   # pos is expected to be sorted
   def inspected_point_in_map(self, me, pos):
@@ -302,8 +305,8 @@ class RobotDriver(Node):
             pos[b - 1] = tmp
 
       # angle check
-      for y in range(0, map_height):
-        for x in range(0, map_width):
+      for x in range(map_width - 1, -1, -1):
+        for y in range(0, map_height):
           if self.inspected_point_in_map((x, y), pos):
             if self.blocked((x, y)):
               ret = True
@@ -332,70 +335,10 @@ class RobotDriver(Node):
       
     return ret
       
-
-  def map_area_blocked(self, pos):
-    # sort pos in increasing order of y-coordinate
-    for a in range(2, -1, -1):
-      for b in range(a + 1, 4):
-        if pos[b][1] < pos[b - 1][1] or (pos[b][1] == pos[b - 1][1] and pos[b][0] < pos[b - 1][0]):
-          tmp = pos[b]
-          pos[b] = pos[b - 1]
-          pos[b - 1] = tmp
-
-    left_most = min(pos[2].x, pos[1].x)
-    right_most = max(pos[2].x, pos[1].x)
-
-    # angle check
-    # d1
-    for y in range(pos[0].y, pos[1].y + 1):
-      for x in range(left_most, right_most + 1):
-        p0p1= self.get_map_angle(pos[0], pos[1])
-        p0p2 = self.get_map_angle(pos[0], pos[2])
-        p0x1 = self.get_map_angle(pos[0], (x, y))
-        minp = min(p0p1, p0p2)
-        maxp = max(p0p1, p0p2)
-        if self.compare_floats(p0x1, minp, self.angular_precision, 1) and self.compare_floats(p0x1, maxp, self.angular_precision, -1):
-          if self.blocked(x, y):
-            return True
-          
-    # d2
-    for y in range(pos[1].y, pos[2].y + 1):
-      for x in range(left_most, right_most + 1):
-        p2p0 = self.get_map_angle(pos[2], pos[0])
-        p1p3 = self.get_map_angle(pos[1], pos[3])
-        p1x2 = self.get_map_angle(pos[1], (x, y))
-        p2x2 = self.get_map_angle(pos[2], (x, y))
-
-        # p2 left, p1 right
-        if pos[2].x < pos[1].x:
-          cmp1 = self.compare_floats(p1x2, -math.pi, self.angular_precision, 1) and self.compare_floats(p1x2, p1p3, self.angular_precision, -1)
-          cmp2 = self.compare_floats(p2x2, 0, self.angular_precision, 1) and self.compare_floats(p2x2, p2p0, self.angular_precision, -1)    
-        # p1 left, p2 right
-        else:
-          p2x2 = self.turn_angle_positive(self.get_map_angle(pos[2], (x, y)))
-          cmp1 = self.compare_floats(p1x2, p1p3, self.angular_precision, 1) and self.compare_floats(p1x2, 0.0, self.angular_precision, -1)
-          cmp2 = self.compare_floats(p2x2, p2p0, self.angular_precision, 1) and self.compare_floats(p1x2, math.pi, self.angular_precision, -1)
-        
-        if cmp1 and cmp2:
-          if self.blocked(x, y):
-            return True
-
-    # d3
-    for y in range(pos[2].y, pos[3].y + 1):
-      for x in range(left_most, right_most + 1):
-        p3p1= self.get_map_angle(pos[3], pos[1])
-        p3p2 = self.get_map_angle(pos[3], pos[2])
-        p3x3 = self.get_map_angle(pos[3], (x, y))
-        minp = min(p3p1, p3p2)
-        maxp = max(p3p1, p3p2)
-        if self.compare_floats(p3x3, minp, self.angular_precision, 1) and self.compare_floats(p3x3, maxp, self.angular_precision, -1):
-          if self.blocked(x, y):
-            return True
-    
-    return False
-
   def blocked(self, pos):
-    return image_array[pos[0], pos[1]] == BLOCKED
+    if self.is_out_of_bound(pos):
+      return True
+    return image.getpixel((pos[0], pos[1])) == BLOCKED
   
   def turn_angle_positive(self, angle):
     if angle >= 0:
@@ -426,15 +369,15 @@ class RobotDriver(Node):
     current_pos_left = self.get_real_position_left(current_pos, ROBOT_COVER_RADIUS, theta)
     current_pos_right = self.get_real_position_right(current_pos, ROBOT_COVER_RADIUS, theta)
 
-    new_pos_left = self.get_real_position_ahead(self, current_pos_left, ROBOT_COMFORT_RADIUS, theta)
-    new_pos_right = self.get_real_position_ahead(self, current_pos_right, ROBOT_COMFORT_RADIUS, theta)
+    new_pos_left = self.get_real_position_ahead(current_pos_left, ROBOT_COMFORT_RADIUS, theta)
+    new_pos_right = self.get_real_position_ahead(current_pos_right, ROBOT_COMFORT_RADIUS, theta)
     
     current_map_pos_left = self.real_to_map_position(current_pos_left)
     current_map_pos_right = self.real_to_map_position(current_pos_right)
     new_map_pos_left = self.real_to_map_position(new_pos_left)
     new_map_pos_right = self.real_to_map_position(new_pos_right)
 
-    return not self.map_area_blocked([current_map_pos_left, current_map_pos_right, new_map_pos_left, new_map_pos_right])
+    return self.map_area_blocked_with_printing([current_map_pos_left, current_map_pos_right, new_map_pos_left, new_map_pos_right])
 
   def current_orientation(self):
     orientation = self.current_pose.orientation
@@ -491,6 +434,10 @@ class RobotDriver(Node):
 
   # def finish():
   #   return None
+
+def pretty_print_position(pos):
+  print("x: %s" %pos[0])
+  print("y: %s" %pos[1])
     
 def main(args=None):
     rclpy.init(args=args)
