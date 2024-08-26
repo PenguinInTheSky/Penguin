@@ -15,7 +15,7 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.6
+ROBOT_COMFORT_RADIUS = 0.3
 ROBOT_COVER_RADIUS = 0.3
 
 # get map
@@ -85,9 +85,10 @@ class RobotDriver(Node):
     self.timer = self.create_timer(self.publish_rate, self.move)
     self.current_pose = Pose()
     self.frozen = False
-    self.angular_velocity = math.pi/6
-    self.angular_precision = 0.05
+    self.angular_velocity = math.pi/5
+    self.angular_precision = 0.03
     self.linear_velocity = 0.7
+    self.linear_precision = 0.05
 
     self.get_logger().info("Created robot driver")
 
@@ -151,12 +152,18 @@ class RobotDriver(Node):
     self.publisher_.publish(msg)
     self.get_logger().info('Publishing: "%s"' % msg)
   
+  def pythagoras_distance(self, me, other):
+    dx = me[0] - other[0]
+    dy = me[1] - other[1]
+    return math.sqrt(dx * dx + dy * dy)
+
   def mark_visited(self):
     MAP_COVER_RADIUS = int(ROBOT_COVER_RADIUS / map_resolution)
     robot_x, robot_y = self.real_to_map_position(self.pos_to_tuple(self.current_position()))
     for x in range (robot_x - MAP_COVER_RADIUS, robot_x + MAP_COVER_RADIUS + 1):
       for y in range (robot_y - MAP_COVER_RADIUS, robot_y + MAP_COVER_RADIUS + 1):
-        if not self.is_out_of_bound((x, y)):
+        distance = self.pythagoras_distance((robot_x, robot_y), (x, y))
+        if not self.is_out_of_bound((x, y)) and self.compare_floats(MAP_COVER_RADIUS, distance, self.linear_precision, 1):
           visited[x, y] = True
   
   # DEBUG
@@ -184,11 +191,18 @@ class RobotDriver(Node):
   def is_facing_left(self):
     return self.equal_floats(math.pi/2, self.current_orientation()[2], self.angular_precision)
 
+  def is_facing_ahead(self):
+    return self.equal_floats(0.0, self.current_orientation()[2], self.angular_precision)
+  
+  # def face_ahead(self):
+  #   msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
+  #   self.publisher_.publish(msg)
+  #   self.get_logger().info('Publishing: "%s"' % msg)
+
   def turn(self):
     msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
     self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)
-  
+    self.get_logger().info('Publishing: "%s"' % msg)  
     
   def move_left_unvisited(self):
     if not self.is_facing_left():
@@ -408,9 +422,6 @@ class RobotDriver(Node):
   #   return None
 
 
-  # def move_forward():
-  #   return None
-
   # def next_line():
   #   return None
 
@@ -423,8 +434,6 @@ class RobotDriver(Node):
   # def face_right(self):
   #   return None
   
-  # def face_ahead(self):
-  #   return None
 
   
   # # is right side of the robot on the map, not relatively to the robot, unvisited
