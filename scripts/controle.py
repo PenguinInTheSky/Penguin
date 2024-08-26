@@ -15,7 +15,7 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.3
+ROBOT_COMFORT_RADIUS = 0.6
 ROBOT_COVER_RADIUS = 0.3
 
 # get map
@@ -85,22 +85,22 @@ class RobotDriver(Node):
     self.timer = self.create_timer(self.publish_rate, self.move)
     self.current_pose = Pose()
     self.frozen = False
-    self.angular_velocity = math.pi/5
-    self.angular_precision = 0.03
+    self.angular_velocity = math.pi/6
+    self.angular_precision = 0.05
     self.linear_velocity = 0.7
     self.linear_precision = 0.05
 
-    self.get_logger().info("Created robot driver")
+    self.log("Created robot driver", 0)
 
   def pose_callback(self, msg):
     self.current_pose = msg.pose.pose
     self.mark_visited()
     self.print_visited_map()
     self.real_to_map_position(self.pos_to_tuple(self.current_position()))
-    self.get_logger().info('Robot blocked ahead is %s"' %self.blocked_ahead())
-    # self.get_logger().info('Left_side_unvisited is "%s' % self.is_left_side_unvisited())
-    # self.get_logger().info('Current posing is: "%s"' % self.current_position())
-    self.get_logger().info('Current orientation is: "%s"' % self.current_orientation())
+    # self.log('Robot blocked ahead is %s"' %self.blocked_ahead(), 1)
+    # # self.get_logger().info('Left_side_unvisited is "%s' % self.is_left_side_unvisited())
+    # self.log('Current posing is: "%s"' % self.current_position(), 0)
+    # self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
 
   def get_message(self, x, y, z, roll, pitch, yaw):
     msg = Twist()
@@ -117,8 +117,8 @@ class RobotDriver(Node):
   
   # return true if 2 floats are equal to a certain precision
   def equal_floats(self, float_main, float_other, precision):
-    if (float_main == 0):
-      return float_main == float_other
+    if (float_main == 0.0):
+      return abs(float_other) <= precision * 2
     return abs((float_other - float_main) / float_main) <= precision
   
   # cmp_code: 0 = equal, 1 = main >= other, 2 = main > other, -1 = main <= other, -2 = main < other
@@ -139,18 +139,12 @@ class RobotDriver(Node):
     msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     self.publisher_.publish(msg)
     self.frozen = True
-    self.get_logger().info('Freeze robot')
-
-  def move_ahead(self):
-    msg = self.get_message(self.linear_velocity, 0.0, 0.0, 0.0, 0.0, 0.0)
-    self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)
-    self.get_logger().info('Position: "%s"' % self.current_position())
+    self.log('Freeze robot', 1)
 
   def move_backward(self):
     msg = self.get_message(-self.linear_velocity, 0.0, 0.0, 0.0, 0.0, 0.0)
     self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)
+    self.log('Publishing: "%s"' % msg, 1)
   
   def pythagoras_distance(self, me, other):
     dx = me[0] - other[0]
@@ -178,41 +172,13 @@ class RobotDriver(Node):
         file.write('\n')
       file.close()
 
-  # is left side of the robot on the map, not relatively to the robot, unvisited
-  def is_left_side_unvisited(self):
-    current_pose = self.current_position()
-    left_map = self.real_to_map_position(self.pos_to_tuple(current_pose))
-    # self.get_logger().info('Map position "%s "%s"' %(left_map[0], left_map[1]))
-    left_map = (left_map[0], int(left_map[1] - ROBOT_COMFORT_RADIUS / map_resolution))
-    # self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
-    # self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
-    return not self.is_out_of_bound((left_map[0], left_map[1] - 1)) and not visited[left_map[0], left_map[1] - 1]
-
-  def is_facing_left(self):
-    return self.equal_floats(math.pi/2, self.current_orientation()[2], self.angular_precision)
-
-  def is_facing_ahead(self):
-    return self.equal_floats(0.0, self.current_orientation()[2], self.angular_precision)
-  
-  # def face_ahead(self):
-  #   msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
-  #   self.publisher_.publish(msg)
-  #   self.get_logger().info('Publishing: "%s"' % msg)
-
-  def turn(self):
-    msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
-    self.publisher_.publish(msg)
-    self.get_logger().info('Publishing: "%s"' % msg)  
-    
-  def move_left_unvisited(self):
-    if not self.is_facing_left():
-      self.turn()
-    elif not self.blocked_ahead():
-      self.move_ahead()
+  # DEBUG
+  def log(self, msg, debug):
+    if debug:
+      if self.get_logger().get_effective_level() <= rclpy.logging.LoggingSeverity.DEBUG:
+        self.get_logger().info(msg)
     else:
-      self.freeze()
-    # else:
-    #   self.face_ahead()
+      self.get_logger().info(msg)
 
   def get_real_position_ahead(self, pos, distance, theta):
     print(math.cos(theta))
@@ -394,13 +360,89 @@ class RobotDriver(Node):
   def pos_to_tuple(self, pos):
     return (pos.x, pos.y)
   
-  def move(self):
-    if self.is_left_side_unvisited():
-      self.move_left_unvisited()
+  def is_this_square_angle_unvisited(self, square_angle):
+    current_pose = self.current_position()
+    next_pose = self.get_real_position_ahead(self.pos_to_tuple(current_pose), ROBOT_COMFORT_RADIUS, square_angle)
+    next_map = self.real_to_map_position(next_pose)
+    if square_angle == 0.0:
+      next_map = (next_map[0] + 1, next_map[1])
+    elif square_angle == -math.pi:
+      next_map = (next_map[0] - 1, next_map[1])
+    elif square_angle == -math.pi/2:
+      next_map = (next_map[0], next_map[1] + 1)
+    else:
+      next_map = (next_map[0], next_map[1] - 1)
+    # self.log('Current pose: "%s"' %current_pose, 0)
+    # self.log('Next pose: "%s" "%s"' %(next_pose[0], next_pose[1]), 0)
+    # # self.get_logger().info('Map position "%s "%s"' %(left_map[0], left_map[1]))
+    current_map = self.real_to_map_position(self.pos_to_tuple(current_pose))
+    # self.log('Current pose in map: "%s" "%s"' %(current_map[0], current_map[1]), 0)
+    # self.log('Next pose in map: "%s" "%s"' %(next_map[0], next_map[1]), 0)
+    # self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
+    # self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
+    return not self.is_out_of_bound((next_map[0], next_map[1])) and not visited[next_map[0], next_map[1]]
+
+  # is left side of the robot on the map, not relatively to the robot, unvisited
+  def is_facing_this_angle(self, angle):
+    current_angle = self.current_orientation()[2]
+    cmp1 = self.equal_floats(angle, current_angle, self.angular_precision)
+    cmp2 = self.equal_floats(angle, current_angle - 2*math.pi, self.angular_precision)
+    return cmp1 or cmp2
+
+  def turn(self, angle):
+    current_angle = self.current_orientation()[2]
+    if current_angle > angle:
+      angle += 2*math.pi
+    if angle - current_angle < math.pi:
+      self.log("anti-clockwise", 0)
+      msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
+    else:
+      self.log("clockwise", 0)
+      msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, -self.angular_velocity)
+    self.publisher_.publish(msg)
+    self.log('Publishing: "%s"' % msg, 1)
+      
+  def move_ahead(self):
+    msg = self.get_message(self.linear_velocity, 0.0, 0.0, 0.0, 0.0, 0.0)
+    self.publisher_.publish(msg)
+    self.log('Publishing: "%s"' % msg, 1)
+    self.log('Position: "%s"' % self.current_position(), 1)
+  
+  def move_squared_angle_unvisited(self, angle):
+    if not self.is_facing_this_angle(angle):
+      if angle == math.pi/2:
+        self.log("Trying to face left", 0)
+      elif angle == 0.0:
+        self.log("Trying to face north", 0)
+      elif angle == -math.pi:
+        self.log("Trying to face south", 0)
+      self.turn(angle)
     elif not self.blocked_ahead():
+      # if angle == math.pi/2:
+      #   self.log("Facing left, moving ahead", 0)
+      # # el
+      if angle == 0.0:
+        is_facing = self.is_facing_this_angle(angle)
+        # self.log("Facing north, moving ahead", 0)
+        # self.log('"%s"' %is_facing, 0)
+        # self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
       self.move_ahead()
     else:
       self.freeze()
+
+  def move(self):
+    if self.is_this_square_angle_unvisited(math.pi/2):
+      # self.log("Left side unvisited", 0)
+      self.move_squared_angle_unvisited(math.pi/2)
+    elif self.is_this_square_angle_unvisited(0.0):
+      # self.log("North side unvisited", 0)
+      self.move_squared_angle_unvisited(0.0)
+    elif self.is_this_square_angle_unvisited(-math.pi):
+      self.move_squared_angle_unvisited(-math.pi)
+
+    else:
+      # self.log("Freeze", 0)
+      self.move_squared_angle_unvisited(-math.pi)
 
     # if self.is_left_side_unvisited():
     #   self.move_left_unvisited()
