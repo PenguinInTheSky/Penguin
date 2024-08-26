@@ -16,7 +16,7 @@ BLOCKED = 0
 EMPTY = 254
 
 ROBOT_COMFORT_RADIUS = 0.6
-ROBOT_COVER_RADIUS = 0.3
+ROBOT_COVER_RADIUS = 0.4
 
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
@@ -360,7 +360,9 @@ class RobotDriver(Node):
   def pos_to_tuple(self, pos):
     return (pos.x, pos.y)
   
-  def is_this_square_angle_unvisited(self, square_angle):
+  def does_this_square_angle_need_visiting(self, square_angle):
+    if self.is_facing_this_angle(square_angle) and self.blocked_ahead():
+      return False
     current_pose = self.current_position()
     next_pose = self.get_real_position_ahead(self.pos_to_tuple(current_pose), ROBOT_COMFORT_RADIUS, square_angle)
     next_map = self.real_to_map_position(next_pose)
@@ -431,13 +433,13 @@ class RobotDriver(Node):
       self.freeze()
 
   def move(self):
-    if self.is_this_square_angle_unvisited(math.pi/2):
+    if self.does_this_square_angle_need_visiting(math.pi/2):
       # self.log("Left side unvisited", 0)
       self.move_squared_angle_unvisited(math.pi/2)
-    elif self.is_this_square_angle_unvisited(0.0):
+    elif self.does_this_square_angle_need_visiting(0.0):
       # self.log("North side unvisited", 0)
       self.move_squared_angle_unvisited(0.0)
-    elif self.is_this_square_angle_unvisited(-math.pi):
+    elif self.does_this_square_angle_need_visiting(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
 
     else:
