@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 import yaml
 from PIL import Image
 import numpy
@@ -15,7 +16,7 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.6
+ROBOT_COMFORT_RADIUS = 0.7
 ROBOT_COVER_RADIUS = 0.4
 
 # get map
@@ -85,8 +86,8 @@ class RobotDriver(Node):
     self.timer = self.create_timer(self.publish_rate, self.move)
     self.current_pose = Pose()
     self.frozen = False
-    self.angular_velocity = math.pi/6
-    self.angular_precision = 0.05
+    self.angular_velocity = math.pi/5
+    self.angular_precision = 0.1
     self.linear_velocity = 0.7
     self.linear_precision = 0.05
 
@@ -345,6 +346,21 @@ class RobotDriver(Node):
 
     return self.map_area_blocked_with_printing([current_map_pos_left, current_map_pos_right, new_map_pos_left, new_map_pos_right])
 
+  def blocked_ahead_angle(self, theta):
+    current_pos = self.pos_to_tuple(self.current_position())
+    current_pos_left = self.get_real_position_left(current_pos, ROBOT_COVER_RADIUS, theta)
+    current_pos_right = self.get_real_position_right(current_pos, ROBOT_COVER_RADIUS, theta)
+
+    new_pos_left = self.get_real_position_ahead(current_pos_left, ROBOT_COMFORT_RADIUS, theta)
+    new_pos_right = self.get_real_position_ahead(current_pos_right, ROBOT_COMFORT_RADIUS, theta)
+    
+    current_map_pos_left = self.real_to_map_position(current_pos_left)
+    current_map_pos_right = self.real_to_map_position(current_pos_right)
+    new_map_pos_left = self.real_to_map_position(new_pos_left)
+    new_map_pos_right = self.real_to_map_position(new_pos_right)
+
+    return self.map_area_blocked_with_printing([current_map_pos_left, current_map_pos_right, new_map_pos_left, new_map_pos_right])
+
   def current_orientation(self):
     orientation = self.current_pose.orientation
     return Rotation.from_quat([orientation.x, orientation.y, orientation.z, orientation.w]).as_euler('xyz', degrees = False)
@@ -396,11 +412,11 @@ class RobotDriver(Node):
     if current_angle > angle:
       angle += 2*math.pi
     if angle - current_angle < math.pi:
-      self.log("anti-clockwise", 0)
       msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
     else:
-      self.log("clockwise", 0)
       msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, -self.angular_velocity)
+      
+    msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
     self.publisher_.publish(msg)
     self.log('Publishing: "%s"' % msg, 1)
       
@@ -410,6 +426,16 @@ class RobotDriver(Node):
     self.log('Publishing: "%s"' % msg, 1)
     self.log('Position: "%s"' % self.current_position(), 1)
   
+  
+  def change_line(self):
+    if not self.is_facing_this_angle(-math.pi/2):
+      self.log("Trying to face right", 0)
+      self.turn(-math.pi/2)
+    else:
+      self.move_ahead()
+      time.sleep(0.1)
+      self.freeze()
+
   def move_squared_angle_unvisited(self, angle):
     if not self.is_facing_this_angle(angle):
       if angle == math.pi/2:
@@ -423,14 +449,12 @@ class RobotDriver(Node):
       # if angle == math.pi/2:
       #   self.log("Facing left, moving ahead", 0)
       # # el
-      if angle == 0.0:
-        is_facing = self.is_facing_this_angle(angle)
+      # if angle == 0.0:
+      #   is_facing = self.is_facing_this_angle(angle)
         # self.log("Facing north, moving ahead", 0)
         # self.log('"%s"' %is_facing, 0)
         # self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
       self.move_ahead()
-    else:
-      self.freeze()
 
   def move(self):
     if self.does_this_square_angle_need_visiting(math.pi/2):
@@ -441,10 +465,19 @@ class RobotDriver(Node):
       self.move_squared_angle_unvisited(0.0)
     elif self.does_this_square_angle_need_visiting(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
-
-    else:
+    elif not self.is_facing_this_angle(-math.pi/2) or not self.blocked_ahead():
       # self.log("Freeze", 0)
+      self.change_line()
+    elif not self.blocked_ahead_angle(math.pi/2):
+      self.move_squared_angle_unvisited(math.pi/2)
+    elif not self.blocked_ahead_angle(0.0):
+      self.move_squared_angle_unvisited(0.0)
+    elif not self.blocked_ahead_angle(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
+    elif not self.blocked_ahead_angle(-math.pi/2):
+      self.move_squared_angle_unvisited(-math.pi/2)
+    else:
+      self.freeze()
 
     # if self.is_left_side_unvisited():
     #   self.move_left_unvisited()
@@ -455,10 +488,6 @@ class RobotDriver(Node):
     # else:
     #   self.move_backward()
 
-  # def change_line(self):
-  #   self.face_right()
-  #   self.move_ahead()
-  #   self.face_right()
 
 
     
