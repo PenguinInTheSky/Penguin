@@ -49,8 +49,7 @@ class RobotDriver(Node):
     )
 
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
-    self.publish_rate = 0.2
-    self.timer = self.create_timer(self.publish_rate, self.move)
+    self.timer = self.create_timer(PUBLISH_RATE, self.move)
     self.current_pose = Pose()   
     self.current_faux_position = self.current_pose.position
     self.frozen = False
@@ -78,14 +77,11 @@ class RobotDriver(Node):
     msg.angular.y = pitch
     msg.angular.z = yaw
     return msg
-  
-
 
   # DEBUG
   def print_pose(self):
     self.log('Current posing is: "%s"' % self.current_position(), 0)
     self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
-
 
   # DEBUG
   def log(self, msg, debug):
@@ -108,14 +104,14 @@ class RobotDriver(Node):
   def does_this_square_angle_need_visiting(self, square_angle):
     current_pose = self.current_faux_position
     if self.map.blocked_ahead_angle(square_angle, current_pose):
-      if square_angle == math.pi/2:
-        self.log("Left is blocked", 0)
-      elif square_angle == 0.0:
-        self.log("North is blocked", 0)
-      elif square_angle == -math.pi:
-        self.log("South is blocked", 0)
-      else:
-        self.log("Right is blocked", 0)
+      # if square_angle == math.pi/2:
+      #   self.log("Left is blocked", 0)
+      # elif square_angle == 0.0:
+      #   self.log("North is blocked", 0)
+      # elif square_angle == -math.pi:
+      #   self.log("South is blocked", 0)
+      # else:
+      #   self.log("Right is blocked", 0)
       return False
     next_pose = get_real_position_ahead(pos_to_tuple(current_pose), ROBOT_COMFORT_RADIUS, square_angle)
     next_map = self.map.real_to_map_position(next_pose)
@@ -127,23 +123,6 @@ class RobotDriver(Node):
       next_map = (next_map[0], next_map[1] + 1)
     else:
       next_map = (next_map[0], next_map[1] - 1)
-    # self.log('Current pose: "%s"' %current_pose, 0)
-    # self.log('Next pose: "%s" "%s"' %(next_pose[0], next_pose[1]), 0)
-    # # self.get_logger().info('Map position "%s "%s"' %(left_map[0], left_map[1]))
-    current_map = self.map.real_to_map_position(pos_to_tuple(current_pose))
-    # self.log('Current pose in map: "%s" "%s"' %(current_map[0], current_map[1]), 0)
-    # self.log('Next pose in map: "%s" "%s"' %(next_map[0], next_map[1]), 0)
-    # self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
-    # self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
-    # if not (not self.is_out_of_bound((next_map[0], next_map[1])) and not visited[next_map[0], next_map[1]]):
-    #   if square_angle == math.pi/2:
-    #     self.log("Left visited", 0)
-    #   elif square_angle == 0.0:
-    #     self.log("North visited", 0)
-    #   elif square_angle == -math.pi:
-    #     self.log("South visited", 0)
-    #   else:
-    #     self.log("Right visited", 0)
     return not self.map.is_out_of_bound((next_map[0], next_map[1])) and not self.map.is_visited(next_map[0], next_map[1])
 
   # is left side of the robot on the map, not relatively to the robot, unvisited
@@ -192,12 +171,13 @@ class RobotDriver(Node):
     self.log('Position: "%s"' % self.current_position(), 1)
   
   def change_line(self):
-    self.log("changing line", 0)
+    # self.log("changing line", 0)
     if not self.is_facing_this_angle(-math.pi/2):
-      # self.log("Trying to face right", 0)
+      self.log("Trying to face right", 0)
       self.turn(-math.pi/2)
     else:
       self.stop_turn()
+      self.log("Move right", 0)
       self.move_ahead()
       time.sleep(0.06)
       self.freeze()
@@ -215,6 +195,14 @@ class RobotDriver(Node):
       self.turn(angle)
     elif not self.map.blocked_ahead_angle(angle, self.current_faux_position):
       self.stop_turn()
+      if angle == math.pi/2:
+        self.log("Move left", 0)
+      elif angle == 0.0:
+        self.log("Move north", 0)
+      elif angle == -math.pi:
+        self.log("Move south", 0)
+      else:
+        self.log("Move right", 0)
       self.move_ahead()
 
   def move(self):

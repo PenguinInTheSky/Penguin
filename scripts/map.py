@@ -27,10 +27,12 @@ class Map():
 
     self.visited = numpy.zeros([self.width, self.height], dtype = bool)
 
+    self.wall_thickness = 4
+
     for x in range(0, self.width):
       for y in range(0, self.height):
         pixel = self.image.getpixel((x, y))
-        if pixel != EMPTY:
+        if pixel != EMPTY or self.wall((x, y)):
           self.visited[x, y] = True
 
   def mark_visited(self, pos):
@@ -185,9 +187,7 @@ class Map():
     return ret
       
   def blocked(self, pos):
-    if self.is_out_of_bound(pos):
-      return True
-    return self.image.getpixel((pos[0], pos[1])) == BLOCKED
+    return self.is_out_of_bound(pos) or self.wall(pos) or self.image.getpixel((pos[0], pos[1])) == BLOCKED
 
   def blocked_ahead_angle(self, theta, robot_pos):
     current_pos = pos_to_tuple(robot_pos)
@@ -203,3 +203,6 @@ class Map():
     new_map_pos_right = self.real_to_map_position(new_pos_right)
 
     return self.map_area_blocked_with_printing([current_map_pos_left, current_map_pos_right, new_map_pos_left, new_map_pos_right], robot_pos)
+
+  def wall(self, pos):
+    return pos[0] < self.wall_thickness or pos[0] >= self.width - self.wall_thickness or pos[1] < self.wall_thickness or pos[1] >= self.height - self.wall_thickness
