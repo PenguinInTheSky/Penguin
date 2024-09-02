@@ -51,16 +51,17 @@ class RobotDriver(Node):
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
     self.publish_rate = 0.2
     self.timer = self.create_timer(self.publish_rate, self.move)
-    self.current_pose = Pose()
+    self.current_pose = Pose()   
+    self.current_faux_position = self.current_pose.position
     self.frozen = False
     self.turning = False
     self.map = Map()
     self.log("Created robot driver", 0)
 
   def pose_callback(self, msg):
+    self.current_pose = msg.pose.pose
     if not self.turning:
-      self.current_pose.position = msg.pose.pose.position
-    self.current_pose.orientation = msg.pose.pose.orientation
+      self.current_faux_position = self.current_pose.position
     self.map.mark_visited(self.current_position())
     self.map.print_visited_map()
     # self.log('Robot blocked ahead is %s"' %self.blocked_ahead(), 1)
@@ -105,7 +106,7 @@ class RobotDriver(Node):
     return self.current_pose.position
   
   def does_this_square_angle_need_visiting(self, square_angle):
-    current_pose = self.current_position()
+    current_pose = self.current_faux_position
     if self.map.blocked_ahead_angle(square_angle, current_pose):
       if square_angle == math.pi/2:
         self.log("Left is blocked", 0)
@@ -212,7 +213,7 @@ class RobotDriver(Node):
       else:
         self.log("Trying to face right", 0)
       self.turn(angle)
-    elif not self.map.blocked_ahead_angle(angle, self.current_position()):
+    elif not self.map.blocked_ahead_angle(angle, self.current_faux_position):
       self.stop_turn()
       self.move_ahead()
 
@@ -225,15 +226,15 @@ class RobotDriver(Node):
       self.move_squared_angle_unvisited(0.0)
     elif self.does_this_square_angle_need_visiting(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
-    elif not self.is_facing_this_angle(-math.pi/2) or not self.map.blocked_ahead_angle(-math.pi/2, self.current_position()):
+    elif not self.is_facing_this_angle(-math.pi/2) or not self.map.blocked_ahead_angle(-math.pi/2, self.current_faux_position):
       self.change_line()
-    elif not self.map.blocked_ahead_angle(math.pi/2, self.current_position()):
+    elif not self.map.blocked_ahead_angle(math.pi/2, self.current_faux_position):
       self.move_squared_angle_unvisited(math.pi/2)
-    elif not self.map.blocked_ahead_angle(0.0, self.current_position()):
+    elif not self.map.blocked_ahead_angle(0.0, self.current_faux_position):
       self.move_squared_angle_unvisited(0.0)
-    elif not self.map.blocked_ahead_angle(-math.pi, self.current_position()):
+    elif not self.map.blocked_ahead_angle(-math.pi, self.current_faux_position):
       self.move_squared_angle_unvisited(-math.pi)
-    elif not self.map.blocked_ahead_angle(-math.pi/2, self.current_position()):
+    elif not self.map.blocked_ahead_angle(-math.pi/2, self.current_faux_position):
       self.move_squared_angle_unvisited(-math.pi/2)
     else:
       self.freeze()
