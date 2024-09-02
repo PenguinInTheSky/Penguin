@@ -179,7 +179,7 @@ class RobotDriver(Node):
       self.stop_turn()
       self.log("Move right", 0)
       self.move_ahead()
-      time.sleep(0.06)
+      time.sleep(1)
       self.freeze()
 
   def move_squared_angle_unvisited(self, angle):
@@ -214,8 +214,9 @@ class RobotDriver(Node):
       self.move_squared_angle_unvisited(0.0)
     elif self.does_this_square_angle_need_visiting(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
-    elif not self.is_facing_this_angle(-math.pi/2) or not self.map.blocked_ahead_angle(-math.pi/2, self.current_faux_position):
-      self.change_line()
+    elif self.does_this_square_angle_need_visiting(-math.pi/2):
+      self.move_squared_angle_unvisited(-math.pi/2)
+      
     elif not self.map.blocked_ahead_angle(math.pi/2, self.current_faux_position):
       self.move_squared_angle_unvisited(math.pi/2)
     elif not self.map.blocked_ahead_angle(0.0, self.current_faux_position):
@@ -224,6 +225,7 @@ class RobotDriver(Node):
       self.move_squared_angle_unvisited(-math.pi)
     elif not self.map.blocked_ahead_angle(-math.pi/2, self.current_faux_position):
       self.move_squared_angle_unvisited(-math.pi/2)
+      
     else:
       self.freeze()
 
