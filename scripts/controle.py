@@ -16,8 +16,8 @@ import math
 BLOCKED = 0
 EMPTY = 254
 
-ROBOT_COMFORT_RADIUS = 0.7
-ROBOT_COVER_RADIUS = 0.4
+ROBOT_COMFORT_RADIUS = 0.6
+ROBOT_COVER_RADIUS = 0.3
 
 # get map
 pkg_path = os.path.join(get_package_share_directory('Penguin'))
@@ -82,19 +82,23 @@ class RobotDriver(Node):
     )
 
     self.publisher_ = self.create_publisher(Twist, 'diff_cont/cmd_vel_unstamped', 10)
-    self.publish_rate = 0.01
+    self.publish_rate = 0.2
     self.timer = self.create_timer(self.publish_rate, self.move)
     self.current_pose = Pose()
     self.frozen = False
-    self.angular_velocity = math.pi/5
-    self.angular_precision = 0.1
+    self.angular_velocity = math.pi/7
+    self.angular_precision = 0.05
     self.linear_velocity = 0.7
     self.linear_precision = 0.05
+
+    self.turning = False
 
     self.log("Created robot driver", 0)
 
   def pose_callback(self, msg):
-    self.current_pose = msg.pose.pose
+    if not self.turning:
+      self.current_pose.position = msg.pose.pose.position
+    self.current_pose.orientation = msg.pose.pose.orientation
     self.mark_visited()
     self.print_visited_map()
     self.real_to_map_position(self.pos_to_tuple(self.current_position()))
@@ -115,26 +119,6 @@ class RobotDriver(Node):
 
   def is_out_of_bound(self, pos):
     return pos[0] < 0 or pos[1] < 0 or pos[0] >= map_width or pos[1] >= map_height
-  
-  # return true if 2 floats are equal to a certain precision
-  def equal_floats(self, float_main, float_other, precision):
-    if (float_main == 0.0):
-      return abs(float_other) <= precision * 2
-    return abs((float_other - float_main) / float_main) <= precision
-  
-  # cmp_code: 0 = equal, 1 = main >= other, 2 = main > other, -1 = main <= other, -2 = main < other
-  def compare_floats(self, float_main, float_other, precision, cmp_code):
-    equal = self.equal_floats(float_main, float_other, precision)
-    if equal:
-      if cmp_code == 0 or cmp_code == 1 or cmp_code == -1:
-        return True
-      else:
-        return False
-    else:
-      if float_main > float_other:
-        return cmp_code == 2 or cmp_code == 1
-      else:
-        return cmp_code == -2 or cmp_code == -1
 
   def freeze(self):
     msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -161,6 +145,12 @@ class RobotDriver(Node):
         if not self.is_out_of_bound((x, y)) and self.compare_floats(MAP_COVER_RADIUS, distance, self.linear_precision, 1):
           visited[x, y] = True
   
+  # DEBUG
+  def print_pose(self):
+    self.log('Current posing is: "%s"' % self.current_position(), 0)
+    self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
+    
+
   # DEBUG
   def print_visited_map(self):
     with open('visited_map.txt', 'w') as file:
@@ -193,6 +183,19 @@ class RobotDriver(Node):
   
   def get_real_position_right(self, pos, distance, theta):
     return self.get_real_position_ahead(pos, distance, theta - math.pi/2)
+  
+  def get_map_position_ahead(self, pos, distance, theta):
+    print(math.cos(theta))
+    print(math.sin(theta))
+    new_x = int(pos[0] + math.cos(theta) * distance)
+    new_y = int(pos[1] + math.sin(theta) * distance)
+    return (new_x, new_y)
+  
+  def get_map_position_left(self, pos, distance, theta):
+    return self.get_map_position_ahead(pos, distance, theta + math.pi/2)
+  
+  def get_map_position_right(self, pos, distance, theta):
+    return self.get_map_position_ahead(pos, distance, theta - math.pi/2)
 
   # pos is expected to be sorted
   def inspected_point_in_map(self, me, pos):
@@ -271,12 +274,16 @@ class RobotDriver(Node):
             pos[b] = pos[b - 1]
             pos[b - 1] = tmp
 
+      current_map = self.real_to_map_position(self.pos_to_tuple(self.current_position()))
       # angle check
       for x in range(map_width - 1, -1, -1):
         for y in range(0, map_height):
-          if self.inspected_point_in_map((x, y), pos):
+          if self.inspected_square_in_map((x, y), pos):
             if self.blocked((x, y)):
               ret = True
+            if x == current_map[0] and y == current_map[1]:
+              file.write("O")
+              continue
             if x == pos[0][0] and y == pos[0][1]:
               file.write("P")
             elif x == pos[1][0] and y == pos[1][1]:
@@ -285,9 +292,14 @@ class RobotDriver(Node):
               file.write("P")
             elif x == pos[3][0] and y == pos[3][1]:
               file.write("P")
+            elif self.blocked((x, y)):
+              file.write("X")
             else:
               file.write("I")
           else: 
+            if x == current_map[0] and y == current_map[1]:
+              file.write("O")
+              continue
             if x == pos[0][0] and y == pos[0][1]:
               file.write("P")
             elif x == pos[1][0] and y == pos[1][1]:
@@ -296,6 +308,8 @@ class RobotDriver(Node):
               file.write("P")
             elif x == pos[3][0] and y == pos[3][1]:
               file.write("P")
+            elif self.blocked((x, y)):
+              file.write("x")
             else:
               file.write(".")
         file.write("\n")
@@ -376,10 +390,38 @@ class RobotDriver(Node):
   def pos_to_tuple(self, pos):
     return (pos.x, pos.y)
   
+  # return true if 2 floats are equal to a certain precision
+  def equal_floats(self, float_main, float_other, precision):
+    if (float_main == 0.0):
+      return abs(float_other) <= precision * 2
+    return abs((float_other - float_main) / float_main) <= precision
+  
+  # cmp_code: 0 = equal, 1 = main >= other, 2 = main > other, -1 = main <= other, -2 = main < other
+  def compare_floats(self, float_main, float_other, precision, cmp_code):
+    equal = self.equal_floats(float_main, float_other, precision)
+    if equal:
+      if cmp_code == 0 or cmp_code == 1 or cmp_code == -1:
+        return True
+      else:
+        return False
+    else:
+      if float_main > float_other:
+        return cmp_code == 2 or cmp_code == 1
+      else:
+        return cmp_code == -2 or cmp_code == -1
+  
   def does_this_square_angle_need_visiting(self, square_angle):
-    if self.is_facing_this_angle(square_angle) and self.blocked_ahead():
-      return False
     current_pose = self.current_position()
+    if self.blocked_ahead_angle(square_angle):
+      if square_angle == math.pi/2:
+        self.log("Left is blocked", 0)
+      elif square_angle == 0.0:
+        self.log("North is blocked", 0)
+      elif square_angle == -math.pi:
+        self.log("South is blocked", 0)
+      else:
+        self.log("Right is blocked", 0)
+      return False
     next_pose = self.get_real_position_ahead(self.pos_to_tuple(current_pose), ROBOT_COMFORT_RADIUS, square_angle)
     next_map = self.real_to_map_position(next_pose)
     if square_angle == 0.0:
@@ -398,6 +440,15 @@ class RobotDriver(Node):
     # self.log('Next pose in map: "%s" "%s"' %(next_map[0], next_map[1]), 0)
     # self.get_logger().info('Current position "%s" "%s"' %(current_pose.x, current_pose.y))
     # self.get_logger().info('Map position left "%s "%s"' %(left_map[0], left_map[1]))
+    # if not (not self.is_out_of_bound((next_map[0], next_map[1])) and not visited[next_map[0], next_map[1]]):
+    #   if square_angle == math.pi/2:
+    #     self.log("Left visited", 0)
+    #   elif square_angle == 0.0:
+    #     self.log("North visited", 0)
+    #   elif square_angle == -math.pi:
+    #     self.log("South visited", 0)
+    #   else:
+    #     self.log("Right visited", 0)
     return not self.is_out_of_bound((next_map[0], next_map[1])) and not visited[next_map[0], next_map[1]]
 
   # is left side of the robot on the map, not relatively to the robot, unvisited
@@ -416,24 +467,31 @@ class RobotDriver(Node):
     else:
       msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, -self.angular_velocity)
       
-    msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, self.angular_velocity)
+    self.turning = True
     self.publisher_.publish(msg)
     self.log('Publishing: "%s"' % msg, 1)
       
+  def stop_turn(self):
+    msg = self.get_message(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    self.publisher_.publish(msg)
+    self.log('Publishing: "%s"' % msg, 1)
+    self.turning = False
+    
   def move_ahead(self):
     msg = self.get_message(self.linear_velocity, 0.0, 0.0, 0.0, 0.0, 0.0)
     self.publisher_.publish(msg)
     self.log('Publishing: "%s"' % msg, 1)
     self.log('Position: "%s"' % self.current_position(), 1)
   
-  
   def change_line(self):
+    self.log("changing line", 0)
     if not self.is_facing_this_angle(-math.pi/2):
-      self.log("Trying to face right", 0)
+      # self.log("Trying to face right", 0)
       self.turn(-math.pi/2)
     else:
+      self.stop_turn()
       self.move_ahead()
-      time.sleep(0.1)
+      time.sleep(0.06)
       self.freeze()
 
   def move_squared_angle_unvisited(self, angle):
@@ -444,8 +502,10 @@ class RobotDriver(Node):
         self.log("Trying to face north", 0)
       elif angle == -math.pi:
         self.log("Trying to face south", 0)
+      else:
+        self.log("Trying to face right", 0)
       self.turn(angle)
-    elif not self.blocked_ahead():
+    elif not self.blocked_ahead_angle(angle):
       # if angle == math.pi/2:
       #   self.log("Facing left, moving ahead", 0)
       # # el
@@ -454,6 +514,7 @@ class RobotDriver(Node):
         # self.log("Facing north, moving ahead", 0)
         # self.log('"%s"' %is_facing, 0)
         # self.log('Current orientation is: "%s"' % self.current_orientation(), 0)
+      self.stop_turn()
       self.move_ahead()
 
   def move(self):
@@ -465,7 +526,7 @@ class RobotDriver(Node):
       self.move_squared_angle_unvisited(0.0)
     elif self.does_this_square_angle_need_visiting(-math.pi):
       self.move_squared_angle_unvisited(-math.pi)
-    elif not self.is_facing_this_angle(-math.pi/2) or not self.blocked_ahead():
+    elif not self.is_facing_this_angle(-math.pi/2) or not self.blocked_ahead_angle(-math.pi/2):
       # self.log("Freeze", 0)
       self.change_line()
     elif not self.blocked_ahead_angle(math.pi/2):
@@ -527,6 +588,8 @@ def main(args=None):
     rclpy.spin_once(initial_pose_publisher, timeout_sec=2.0)
 
     driver = RobotDriver()
+    # print(driver.get_real_position_right([25, 25], 3, math.pi/2))
+    # return
     rclpy.spin(driver)
     
     initial_pose_publisher.destroy_node()
