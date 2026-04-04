@@ -1,9 +1,12 @@
 # Penguin
+Step 1: Installation
+Follow instructions in this page to install Ros2:
+https://docs.ros.org/en/humble/Installation.html
+
 Install build tool colcon:
 sudo apt install python3-colcon-common-extensions
 
-Install Ros2:
-https://docs.ros.org/en/humble/Installation.html
+Note: change "humble" into another name if your package name is different
 
 Environment tweak:
 echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
@@ -14,8 +17,7 @@ sudo apt install ros-humble-gazebo-ros-pkgs
 Install ros2_control:
 sudo apt install ros-humble-ros2-control ros-humble-ros2-controllers ros-humble-gazebo-ros2-control
 
-
-Clone project into for local directory
+Step 2: Clone project into for local directory and run it
 
 In the directory, build the project:
 
