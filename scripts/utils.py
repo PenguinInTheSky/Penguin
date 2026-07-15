@@ -1,24 +1,25 @@
 import math
 from params import *
 
+# Get the real position ahead of the robot based on its current position, distance to that position ahead, and orientation (theta)
 def get_real_position_ahead(pos, distance, theta):
-  print(math.cos(theta))
-  print(math.sin(theta))
   new_x = pos[0] + math.cos(theta) * distance
   new_y = pos[1] + math.sin(theta) * distance
   return (new_x, new_y)
 
+# Get the real position to the left of the robot based on its current position, distance to that left position, and orientation (theta)
 def get_real_position_left(pos, distance, theta):
   return get_real_position_ahead(pos, distance, theta + math.pi/2)
 
+# Get the real position to the right of the robot based on its current position, distance to that right position, and orientation (theta)
 def get_real_position_right(pos, distance, theta):
   return get_real_position_ahead(pos, distance, theta - math.pi/2)
 
+# Calculate the Euclidean distance between two points in 2D space
 def pythagoras_distance(me, other):
   dx = me[0] - other[0]
   dy = me[1] - other[1]
   return math.sqrt(dx * dx + dy * dy)
-
 
 def make_angle_positive(angle):
   if angle >= 0:
@@ -29,13 +30,14 @@ def pos_to_tuple(pos):
   return (pos.x, pos.y)
 
 
-# return true if 2 floats are equal to a certain precision
+# Return true if 2 floats are equal to a certain precision
 def equal_floats(float_main, float_other, precision):
   if (float_main == 0.0):
     return abs(float_other) <= precision * 2
   return abs((float_other - float_main) / float_main) <= precision
 
 
+# Compare two floats based on a certain precision and comparison code
 # cmp_code: 0 = equal, 1 = main >= other, 2 = main > other, -1 = main <= other, -2 = main < other
 def compare_floats(float_main, float_other, precision, cmp_code):
   equal = equal_floats(float_main, float_other, precision)
@@ -50,9 +52,7 @@ def compare_floats(float_main, float_other, precision, cmp_code):
     else:
       return cmp_code == -2 or cmp_code == -1
 
-
-  
-# angle of a vector [-pi, pi), soth: -pi/2, north: pi/2, west: -pi, east: 0
+# Angle of a vector [-pi, pi), south: -pi/2, north: pi/2, west: -pi, east: 0
 def get_map_angle(me, other, angular_precision):
   dx = other[0] - me[0]
   dy = me[1] - other[1]

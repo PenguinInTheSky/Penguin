@@ -22,12 +22,19 @@ def generate_launch_description():
     gazebo_params_path = os.path.join(
                     get_package_share_directory(package_name),'config','gazebo_params.yaml')
 
+    
+    path_to_world = os.path.join(
+                    get_package_share_directory(package_name), 'worlds', 'small_room.world')
+    
     gazebo = IncludeLaunchDescription(
       PythonLaunchDescriptionSource([os.path.join(
         get_package_share_directory('gazebo_ros'),'launch','gazebo.launch.py')]),
-        launch_arguments={'extra_gazebo_args': '--ros-args --param-file ' + gazebo_params_path}.items()
+        launch_arguments={
+          'extra_gazebo_args': '--ros-args --param-file ' + gazebo_params_path,
+          'world': path_to_world
+        }.items()
     )
-
+    
     spawn_entity = Node(
       package='gazebo_ros',
       executable='spawn_entity.py',
