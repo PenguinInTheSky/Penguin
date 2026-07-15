@@ -2,6 +2,7 @@ devel/
 logs/
 log/
 build/
+install/
 bin/
 lib/
 msg_gen/
@@ -51,7 +52,6 @@ qtcreator-*
 # Catkin custom files
 CATKIN_IGNORE
 
-install
 visited_map.txt
 scripts/inspecting_map.txt
 inspecting_map.txt

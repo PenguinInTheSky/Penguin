@@ -57,6 +57,9 @@ ros2 run nav2_map_server map_saver_cli -f small_room_saved
 sudo apt install ros-humble-nav2-bringup
 That package ships localization_launch.py, which is exactly the right granularity for you: it brings up just map_server + amcl + a lifecycle_manager to auto-activate both 
 
+config.mapper_params_online_async.yaml
+mode: localisation
+
 two terminals:
 Terminal 1: 
 ros2 launch Penguin launch_gazebo.launch.py
