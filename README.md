@@ -24,8 +24,8 @@ Penguin is a from-scratch differential-drive robot (xacro/URDF description, `ros
 flowchart LR
     subgraph P1["Phase 1: Mapping"]
         direction TB
-        A1["Teleop keyboard"] -->|cmd_vel| B1["ros2_control: DiffDriveController"]
-        B1 -->|drives| C1["Gazebo simulation + lidar plugin"]
+        A1["Teleop keyboard"] -->|cmd_vel| B1["ros2_control<br/>DiffDriveController"]
+        B1 -->|drives| C1["Gazebo simulation<br/>+ lidar plugin"]
         C1 -->|scan| D1["slam_toolbox"]
         D1 -->|map| E1["map_saver"]
     end
@@ -33,9 +33,9 @@ flowchart LR
     subgraph P2["Phase 2: Autonomous exploration"]
         direction TB
         F2["map_server"] -->|map| G2["AMCL"]
-        C2["Gazebo simulation + lidar plugin"] -->|scan| G2
+        C2["Gazebo simulation<br/>+ lidar plugin"] -->|scan| G2
         G2 -->|amcl_pose| H2["Custom exploration node"]
-        H2 -->|cmd_vel| B2["ros2_control: DiffDriveController"]
+        H2 -->|cmd_vel| B2["ros2_control<br/>DiffDriveController"]
         B2 -->|drives| C2
     end
 
