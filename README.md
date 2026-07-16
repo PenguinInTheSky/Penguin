@@ -1,22 +1,22 @@
 # Penguin 🐧
 
-An autonomous differential-drive robot, simulated end-to-end in ROS 2 + Gazebo: it builds a map of a room via SLAM, then autonomously explores every reachable corner of that map using AMCL localization and a **hand-written coverage/exploration algorithm** — no off-the-shelf `nav2` planner involved.
+An autonomous differential-drive robot, simulated end-to-end in ROS 2 + Gazebo, capable of full-floor coverage of a room with obstacles. It builds a map of the room via SLAM, then autonomously explores every reachable corner of that map using AMCL localisation and a **hand-crafted coverage/exploration algorithm** — no off-the-shelf `nav2` planner involved.
 
 [![ROS 2](https://img.shields.io/badge/ROS_2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
 [![Gazebo](https://img.shields.io/badge/Gazebo-Classic_11-orange)](https://classic.gazebosim.org/)
 [![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-## Demo
+## Screenshot
 
 > 🎥 GIF/screenshot of Gazebo + RViz coming soon.
 
 ## Overview
 
-Penguin is a from-scratch differential-drive robot (xacro/URDF description, `ros2_control`-based drivetrain, simulated 2D lidar) that runs a full mapping-then-navigation workflow entirely in simulation:
+Penguin is a differential-drive robot built from scratch using a xacro/URDF description, with a simulated 2D lidar. It is visualised in Gazebo, together with a predefined room containing obstacles, and its motion is controlled using `ros2_control`. The robot runs a full mapping-then-navigation workflow, entirely in simulation, to enable full-floor coverage, as follows:
 
-1. **Build a map** — drive the robot around a custom Gazebo world with keyboard teleop while `slam_toolbox` builds an occupancy grid map from lidar scans.
-2. **Autonomously explore** — reload that saved map, localize against it with AMCL, and let a custom greedy coverage algorithm systematically drive the robot to every unvisited, reachable cell — computing its own swept-rectangle collision checks against the raw occupancy grid rather than delegating to `nav2`'s planner/controller stack.
+1. **Build a map** — drive the robot around the room manually with keyboard teleop, while `slam_toolbox` builds an occupancy grid map from lidar scans.
+2. **Autonomously explore** — reload the saved occupancy map, localise the robot's pose against it with AMCL, and let a custom greedy coverage algorithm systematically drive the robot to every unvisited, reachable area — built from scratch rather than relying on `nav2`'s built-in planner.
 
 ## Architecture
 
@@ -47,10 +47,11 @@ See [`docs/deep-dive.md`](docs/deep-dive.md) for a component-by-component breakd
 ## Key features
 
 - **Custom robot description** (`xacro`) — differential-drive chassis with two driven wheels, two casters, and a simulated 2D lidar, with full visual/collision/inertial properties per link.
-- **`ros2_control`-based drivetrain** — `DiffDriveController` + `JointStateBroadcaster` running against a `gazebo_ros2_control` hardware interface, the same interface a real hardware driver would implement.
-- **SLAM mapping** via `slam_toolbox` (scan matching + pose-graph loop closure).
-- **AMCL localization** against the saved map for the autonomous phase.
-- **A hand-rolled exploration algorithm** (`scripts/`) — reads AMCL's live pose, checks four cardinal directions against the raw occupancy grid via a custom swept-rectangle point-in-polygon collision test, and prioritizes unvisited, reachable cells to systematically cover the whole map.
+- **Gazebo simulation** — simulates the robot and the room in place of real hardware; Gazebo plugins bridge the simulated sensors and actuators into the ROS 2 software stack.
+- **`ros2_control`-based robot-motion control** — `DiffDriveController` and `JointStateBroadcaster` running against a `gazebo_ros2_control` hardware interface, controlling the robot's motion and reporting its joint state.
+- **SLAM mapping** via `slam_toolbox` to build an occupancy map of the room.
+- **AMCL localisation** to localise the robot's position against the saved map for the autonomous phase.
+- **A hand-rolled exploration algorithm** (`scripts/`) — reads AMCL's live pose, checks each of the four cardinal directions for obstacles, and prioritises moving toward whichever unvisited, reachable direction is clear, to systematically cover the whole map.
 
 ## Tech stack
 
@@ -63,7 +64,7 @@ See [`docs/deep-dive.md`](docs/deep-dive.md) for a component-by-component breakd
 - Ubuntu 22.04 (native or WSL2)
 - [ROS 2 Humble Desktop](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)
 
-> **Running in WSL2?** If `colcon build` fails with `configure_file: Operation not permitted`, see the WSL2 note in [`docs/deep-dive.md`](docs/deep-dive.md#debugging-notes-worth-remembering) — it's a one-line `/etc/wsl.conf` fix.
+> **Running in WSL2?** If `colcon build` fails with `configure_file: Operation not permitted`, add `options = "metadata"` under `[automount]` in `/etc/wsl.conf`, then run `wsl --shutdown` from Windows and reopen your terminal.
 
 ### Installation
 
@@ -86,7 +87,9 @@ source install/setup.bash
 
 ## Usage
 
-### View the robot model only
+To watch the robot cover the room, skip straight to [Phase 2](#phase-2--autonomous-exploration).
+
+### View the robot model only using RViz2
 
 ```bash
 ros2 launch Penguin launch_rviz.launch.py
@@ -94,21 +97,23 @@ ros2 launch Penguin launch_rviz.launch.py
 
 ### Phase 1 — build a map
 
-Four terminals (each needs `source install/setup.bash`):
+In `config/mapper_params_online_async.yaml`, set `mode: mapping`.
+
+Four terminals (each needs `source install/setup.bash`, `source /opt/ros/humble/setup.bash`, and `export LIBGL_ALWAYS_SOFTWARE=1` if needed):
 
 ```bash
-# 1. Gazebo + robot
+# 1. Gazebo + robot visualisation
 ros2 launch Penguin launch_gazebo_build_map.launch.py
 
 # 2. SLAM
 ros2 launch slam_toolbox online_async_launch.py \
   params_file:=$(ros2 pkg prefix Penguin)/share/Penguin/config/mapper_params_online_async.yaml
 
-# 3. Drive it around
+# 3. Drive it around: type driving commands in this terminal, following the instructions displayed there
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/diff_cont/cmd_vel_unstamped
 
-# 4. (optional) watch the map build live
-rviz2 -d install/Penguin/share/Penguin/config/view.rviz
+# 4. Monitor the progress of the map build live
+rviz2 -d install/Penguin/share/Penguin/config/view_map_build.rviz
 ```
 
 Once you've covered the space, save the map:
@@ -119,19 +124,21 @@ ros2 run nav2_map_server map_saver_cli -f small_room_saved
 
 ### Phase 2 — autonomous exploration
 
+In `config/mapper_params_online_async.yaml`, set `mode: localization` (this is a literal value the software expects, spelled the American way regardless of the rest of this document).
+
 Two terminals:
 
 ```bash
 # 1. Gazebo + robot + the exploration node
 ros2 launch Penguin launch_gazebo.launch.py
 
-# 2. Localization against the saved map
+# 2. Localisation against the saved map
 ros2 launch nav2_bringup localization_launch.py \
   map:=$(ros2 pkg prefix Penguin)/share/Penguin/maps/small_room/small_room_saved.yaml \
   use_sim_time:=true
 ```
 
-The robot seeds AMCL's initial pose automatically, then drives itself around the room, prioritizing unexplored territory until the whole map is covered.
+The robot seeds AMCL's initial pose automatically, then drives itself around the room, prioritising unexplored territory until the whole map is covered.
 
 ## Project structure
 
@@ -144,18 +151,6 @@ scripts/         custom exploration algorithm (map parsing, geometry, driver nod
 maps/            saved occupancy grid maps
 docs/            deep-dive notes on how each subsystem works
 ```
-
-## Challenges & what I learned
-
-- **WSL2 file permissions.** Building from a Windows-drive path (`/mnt/c/...`) failed with cryptic `Operation not permitted` errors from CMake — traced it to WSL2's `DrvFs` mount faking Unix permissions by default. Fixed at the mount-option level (`metadata` flag in `/etc/wsl.conf`) rather than moving the whole project.
-- **Debugging a silent `ros2_control` topic mismatch.** Teleop published to `/cmd_vel`, but the robot didn't move and threw no errors. Used `ros2 topic info --verbose` to spot `DiffDriveController` was actually listening on `diff_cont/cmd_vel_unstamped` — a controller-relative topic, not the bare default.
-- **Found and fixed a geometry bug** in the custom collision-check algorithm: a misplaced parenthesis meant one branch of the swept-rectangle point-in-polygon test called a helper function with a missing required argument, crashing obstacle avoidance for a narrow range of robot orientations.
-
-## Future improvements
-
-- Add a proper demo GIF/video.
-- Generalize the exploration algorithm beyond a single room layout.
-- Add automated tests for the map/geometry utilities in `scripts/`.
 
 ## License
 

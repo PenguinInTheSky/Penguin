@@ -1,90 +1,95 @@
 # Deep Dive: Q&A
 
-Notes from building this project — the "why" behind design decisions that aren't obvious just from reading the code. See the [README](../README.md) for setup and usage.
+Notes from building this project, in Q&A form. See the [README](../README.md) for setup and usage.
 
-## Robot description (URDF/xacro)
+## Q1: Why do links need an `<inertial>` block defined in xacro?
 
-### Why do links need an `<inertial>` block?
-
-A URDF `<link>` has three optional blocks, each for a different consumer:
+A URDF `<link>` has three optional blocks, each read by a different consumer:
 
 - `<visual>` — what the renderer (RViz, Gazebo GUI) draws.
 - `<collision>` — the geometry the physics engine uses for contact detection.
 - `<inertial>` — mass and the 3×3 inertia tensor, used by the dynamics solver.
 
-Omit `<inertial>` and most simulators default the link's mass to 0. A massless link is physically meaningless to the solver: `F = ma` blows up as acceleration approaches infinity, gravity has nothing to act on, and joint damping/PID control becomes unstable. `xacro` macros usually generate this block procedurally (mass + shape → inertia formula) so it doesn't need to be hand-derived per link.
+Omit `<inertial>` and most simulators (Gazebo, Bullet, DART) default the link's mass to 0. A massless link is physically meaningless to the solver: `F = ma` blows up as acceleration approaches infinity, gravity has nothing to act on, and joint damping/PID control becomes unstable. In practice, `xacro` macros generate this block procedurally from mass + shape, so it doesn't have to be hand-derived for every link.
 
-### How does the lidar work?
+## Q2: How does the simulated lidar actually work?
 
-A Gazebo plugin (`.so` file) is a shared library Gazebo loads and runs *inside its own process* — it is not a ROS node by itself.
+A Gazebo plugin (a `.so` shared library) is loaded and run *inside Gazebo's own process* — it is not a node in the ROS graph by itself.
 
-1. Gazebo parses `<sensor type="ray">` in the xacro and creates a ray-cast sensor with the configured scan range/resolution.
-2. It then `dlopen`s the plugin (`libgazebo_ros_ray_sensor.so`) and calls its init function with the `<ros>`/`<frame_name>` config.
-3. On every update, the plugin reads the raw ray-cast distances and publishes them as `sensor_msgs/msg/LaserScan` on `/scan`.
+For this robot's lidar specifically:
+
+1. Gazebo parses the `<gazebo>` block in the xacro, sees `<sensor type="ray">`, and creates a ray-cast sensor with the configured scan range/resolution.
+2. It then `dlopen`s the plugin and calls its init function, passing the config from `<ros>` and `<frame_name>`.
+3. On every simulation update, the plugin reads the sensor's raw ray-cast distances and publishes them as `sensor_msgs/msg/LaserScan` on `/scan`.
+
+Contrast this with a real lidar: a separate ROS driver node runs as its own process, talking to the hardware over serial/USB, and also publishes `LaserScan` on a topic.
 
 | | Simulation | Real hardware |
 |---|---|---|
-| Data source | Gazebo plugin (fakes the physics) | Driver node (e.g. `rplidar_ros`) talking to hardware over serial/USB |
-| Output | Same `sensor_msgs/LaserScan` on a topic | Same `sensor_msgs/LaserScan` on a topic |
+| Data source | Gazebo plugin | ROS driver node |
 
-Both converge on the same message type/topic shape, so the rest of the stack (RViz, SLAM, exploration) can't tell the difference.
+Both converge on the same message type and topic shape, so nothing downstream (RViz, SLAM, the exploration node) can tell the difference.
 
-## ros2_control
+## Q3: How does `ros2_control` work end-to-end?
 
-### How does the whole ros2_control chain work?
+The Gazebo plugin (`libgazebo_ros2_control.so`) initializes a `controller_manager` inside Gazebo's process. That `controller_manager`:
+
+1. Reads the `<ros2_control>` block in the URDF and loads the hardware interface plugin it specifies (`gazebo_ros2_control/GazeboSystem` here). This plugin reads and writes the command/state interfaces declared per joint, and is what actually translates commands into robot motion (or, on real hardware, into motor signals).
+2. Claims the specific command/state interfaces declared per joint (e.g. `left_wheel_joint`'s `velocity` command interface). A `ResourceManager` inside the `controller_manager` holds all of these in a central registry.
+3. Reads a YAML config file to know which controllers it should load (e.g. `DiffDriveController`, `JointStateBroadcaster`).
+4. Every control cycle, each active controller reads and writes its assigned interfaces from/to that registry to do its job — computing wheel velocities, broadcasting joint state, etc.
+5. The `ResourceManager` guarantees no two controllers ever write to the same command interface at once.
+
+## Q4: What does `robot_state_publisher` actually do?
+
+It parses the URDF once at startup and continuously publishes the TF tree — a transform for every link relative to its parent.
+
+For **fixed** joints (like `lidar_joint`), the transform is constant, so it gets published immediately without needing any joint state. For **movable** joints (`left_wheel_joint`, `right_wheel_joint`), it needs the live angle from `/joint_states` to compute the current transform — which is exactly why it depends on `JointStateBroadcaster` being active.
+
+## Q5: Is `JointStateBroadcaster` actually needed?
+
+Dropping `JointStateBroadcaster` entirely means the wheel joints' TF (the visual rotation of the wheel links) never publishes. That's harmless if nothing is mounted downstream of the wheels in the link tree (nothing is, here — the wheels are leaf links) and nothing else subscribes to `/joint_states`. But it would be a real gap if anything were ever added downstream of a wheel, or if some other tool/diagnostic expected `/joint_states` to include wheel data.
+
+`DiffDriveController` itself doesn't care either way: it reads wheel state directly from the claimed state interfaces, not via the `/joint_states` topic.
+
+## Q6: What is teleop used for?
+
+Manual control of the robot once the world model is set up — driving it around the room so `slam_toolbox` can build a map from the lidar scans as it goes. It's a stand-in for whatever eventually sends velocity commands autonomously (in this project, the custom exploration node in Phase 2).
+
+## Q7: How does SLAM (`slam_toolbox`) actually work?
+
+- **Input**: subscribes to `/scan` (the `LaserScan` from the lidar Gazebo plugin) and the TF tree (`odom`/`base_link`, provided by `robot_state_publisher` + `DiffDriveController`'s odometry).
+- **Scan matching**: each new laser scan is compared against the existing map (or recent scans) to figure out how much the robot has actually moved, correcting for wheel-odometry drift. The correlation search-space parameters control how far/finely it searches for the best-fit alignment.
+- **Map building**: as scan-matched poses accumulate, they're rasterized into an occupancy grid (5cm per cell here) — the classic black/white/gray map of occupied/free/unknown cells.
+- **Pose graph + loop closure**: a graph of robot poses linked by relative constraints from scan matches is maintained. When the robot revisits a previously-mapped area, the match is detected and a graph optimization (via Ceres) corrects accumulated drift across the whole trajectory — this is what stops the map from becoming a warped mess on long runs.
+- **Output**: the `map` frame, the `map → odom` TF correction (the top of the chain `map → odom → base_link → lidar`), and the occupancy grid on `/map`.
+
+## Q8: Why do we need both an `odom` and a `map` frame?
+
+- **`odom → base_link`**, published by `DiffDriveController`: pure wheel-encoder dead reckoning, computed every control cycle (100Hz). Smooth and jitter-free, but drifts unboundedly over time with nothing to self-correct it.
+- **`map → odom`**, published by `slam_toolbox`: computed by matching `/scan` against the map, updated whenever a scan match lands. Globally drift-corrected, but can jump discretely.
+
+Both are kept rather than just one because they serve different consumers: local controllers and obstacle avoidance need a smooth, jitter-free, low-latency pose — a discrete correction jump mid-motion would be disruptive, so they use `odom`. Long-term navigation goals and global path planning need to know where the robot really is in the building, which `odom` alone can't guarantee since its belief silently diverges from reality over a long run — so they use `map`.
+
+Chaining them gives the full pose `map → odom → base_link`: globally accurate (thanks to the `map → odom` correction) while still smooth for control purposes (thanks to `odom → base_link` never jumping). Each node only ever touches its own link in the chain — `DiffDriveController` has zero knowledge of the map, and `slam_toolbox` never touches `odom → base_link` directly, it only corrects the frame above it. That separation is what makes the REP 105 convention work: every package publishes one link, and `tf2` composes the whole chain for anyone downstream (like the exploration node) that needs the full `base_link` pose in the `map` frame.
+
+## Q9: How does `joint_state_publisher_gui` know to only show sliders for the two wheels?
+
+It's simply filtering by joint `type`, straight from `robot_core.xacro`:
 
 ```
-/cmd_vel  →  DiffDriveController  →  command interfaces  →  hardware interface (write())  →  actuator (sim or real)
-                                                                                                      ↓
-/joint_states ←  JointStateBroadcaster ←  state interfaces  ←  hardware interface (read())  ←  encoder/sim state
+left_wheel_joint   type="continuous"
+right_wheel_joint  type="continuous"
+
+footprint_joint    type="fixed"
+base_to_chassis    type="fixed"
 ```
 
-- **`<ros2_control>` block** — declares the abstract contract: which joints exist, and what can be commanded/read on each (e.g. `left_wheel_joint` exposes a `velocity` command interface and `velocity`/`position` state interfaces). This is hardware-agnostic.
-- **Hardware interface plugin** (`gazebo_ros2_control/GazeboSystem` here) — the concrete implementation of that contract. Its `write()` takes whatever's in the command interfaces and applies it to the actuator (Gazebo physics, or a real motor driver on hardware); its `read()` pulls actual state back into the state interfaces. Swapping this one plugin line is all that's needed to go from simulation to real hardware.
-- **`controller_manager`** — the orchestrator. It loads the hardware interface, loads controllers from a YAML config, and every cycle runs: `read()` → each active controller's `update()` → `write()`. Its `ResourceManager` owns the actual interface registry and guarantees two controllers never claim the same command interface.
-- **Gazebo's role**: `libgazebo_ros2_control.so` is a Gazebo plugin that instantiates a real `controller_manager` *inside Gazebo's process*, driven by the simulation step instead of a wall-clock timer — standing in for the standalone `ros2_control_node` you'd run against real hardware.
+`fixed` joints have a permanently constant transform, so there's nothing to control and no slider is generated. `continuous`/`revolute`/`prismatic` joints get one. In this robot, only the two wheel joints are non-fixed.
 
-### What do `DiffDriveController` and `JointStateBroadcaster` actually do?
+## Q10: What does `nav2_map_server` do?
 
-- **`DiffDriveController`** — subscribes to `cmd_vel_unstamped` (Twist), solves the differential-drive inverse kinematics (using `wheel_separation`/`wheel_radius`) to get per-wheel velocity, writes those to the command interfaces. It also reads wheel state back to compute and publish odometry (`/odom` + the `odom → base_link` TF).
-- **`JointStateBroadcaster`** — read-only. Every cycle it reads all available state interfaces and publishes them as `sensor_msgs/JointState` on `/joint_states`. No kinematics, no commanding — purely a state-interfaces-to-topic bridge, consumed by `robot_state_publisher`.
+It's a small package with two complementary tools:
 
-### What does `robot_state_publisher` actually do, and is `JointStateBroadcaster` required?
-
-It parses the URDF once at startup and continuously publishes the TF tree. For **fixed** joints (`lidar_joint`, `base_to_chassis`), the transform is constant and published immediately from the URDF alone — no dependency on `/joint_states`. For **movable** joints (`left_wheel_joint`, `right_wheel_joint`), it needs the live angle from `/joint_states`, which is why it depends on `JointStateBroadcaster`.
-
-Practical implication: dropping `JointStateBroadcaster` only breaks the wheels' *visual* rotation in TF — harmless if nothing is mounted downstream of a wheel and nothing else consumes `/joint_states`. `DiffDriveController` itself never touches `/joint_states`; it reads wheel state directly from the claimed state interfaces.
-
-### How does `joint_state_publisher_gui` know to only show sliders for the wheels?
-
-It's a pure filter on joint `type` in the parsed URDF: `fixed` joints (constant transform, nothing to control) are skipped; `continuous`/`revolute`/`prismatic` joints get a slider. In this robot, only `left_wheel_joint`/`right_wheel_joint` are `type="continuous"` — everything else (`lidar_joint`, casters, chassis mount) is `fixed`.
-
-## Localization & mapping
-
-### How does `slam_toolbox` work?
-
-1. **Input**: `/scan` (from the lidar plugin) + the TF tree (`odom`/`base_link`, provided by `robot_state_publisher` + `DiffDriveController`'s odometry).
-2. **Scan matching**: each new scan is compared against the map/recent scans to estimate actual motion, correcting wheel-odometry drift.
-3. **Map building**: scan-matched poses are rasterized into an occupancy grid (5cm/cell here).
-4. **Loop closure**: when the robot revisits a mapped area, a pose-graph optimization (via Ceres) corrects accumulated drift across the whole trajectory.
-5. **Output**: the `map` frame, the `map → odom` TF correction, and the occupancy grid on `/map`.
-
-### Why keep both `odom` and `map` frames instead of just one?
-
-- **`odom → base_link`** (published by `DiffDriveController`): pure wheel-encoder dead reckoning. Smooth and continuous — no jumps — but drifts unboundedly over time/distance with zero self-correction.
-- **`map → odom`** (published by `slam_toolbox`/AMCL): corrects that drift by matching live scans against the map. Globally accurate, but can jump discretely whenever a new match/loop-closure lands.
-
-Feeding a jumpy, globally-corrected pose straight into a real-time velocity controller would cause sudden corrective jerks. Keeping the two frames separate means fast local control only ever sees the smooth `odom` half, while anything needing global accuracy (path planning) composes the full `map → odom → base_link` chain via `tf2`. Each node only ever publishes its own link in the chain — `DiffDriveController` has zero knowledge of the map, `slam_toolbox`/AMCL never touches `odom → base_link` directly.
-
-### What does `nav2_map_server` do?
-
-Two complementary tools:
-
-- **`map_saver`** (`map_saver_cli`) — subscribes to the live `/map` topic and serializes it to a `.pgm` (occupancy image) + `.yaml` (resolution, origin, thresholds) pair.
-- **`map_server`** — the reverse: loads a saved `.pgm`/`.yaml` pair from disk and republishes it as a live `/map` topic, for AMCL to localize against during autonomous exploration.
-
-## Debugging notes worth remembering
-
-- **WSL2 + `/mnt/c` builds fail with `configure_file: Operation not permitted`.** DrvFs (the Windows-drive mount) doesn't preserve real Linux permissions by default — every file shows up as `root:root` with faked `rwxrwxrwx` bits, which breaks CMake's compiler-detection `chmod` calls. Fix: add `options = "metadata"` to the `[automount]` section of `/etc/wsl.conf`, then `wsl --shutdown` and reopen.
-- **`DiffDriveController` doesn't subscribe to plain `/cmd_vel`.** With `use_stamped_vel: false`, it listens on `<controller_name>/cmd_vel_unstamped` (e.g. `diff_cont/cmd_vel_unstamped`) — a relative topic under its own controller name, not the bare topic `teleop_twist_keyboard` publishes to by default. Confirmed via `ros2 topic info /cmd_vel --verbose` showing 0 subscribers. Fixed by remapping: `--ros-args -r /cmd_vel:=/diff_cont/cmd_vel_unstamped`.
-- **`ros-desktop`/`controller_manager` don't pull in the actual controller plugins.** `diff_drive_controller` and `joint_state_broadcaster` are separate packages (`ros-humble-ros2-controllers`) from `controller_manager` itself — installing the manager isn't enough; `pluginlib` fails to find the plugin classes at load time otherwise.
+- **`map_saver`** (used via `map_saver_cli`): subscribes to the live `/map` topic that `slam_toolbox` publishes while driving around, and serializes it to disk as a `.pgm` (a grayscale image — white=free, black=occupied, gray=unknown) plus a `.yaml` sidecar file (resolution, origin coordinates, occupancy thresholds). That's the format `maps/small_room/small_room_saved.pgm`/`.yaml` are in.
+- **`map_server`** (the other half, used in Phase 2): does the reverse — loads a saved `.pgm`/`.yaml` pair from disk and republishes it as a live `/map` topic. This is what runs instead of `slam_toolbox` once navigating with a pre-built map: `map_server` provides the static `/map`, and AMCL matches live scans against it to localize, rather than building a new map.
