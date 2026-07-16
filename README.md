@@ -1,152 +1,162 @@
-1. Install ROS 2 Humble for Ubuntu Linux 22.04
-https://docs.ros.org/en/humble/Installation/Alternatives/Ubuntu-Development-Setup.html
+# Penguin 🐧
 
-2. Build
-first install: 
-apt install ros-humble-desktop
+An autonomous differential-drive robot, simulated end-to-end in ROS 2 + Gazebo: it builds a map of a room via SLAM, then autonomously explores every reachable corner of that map using AMCL localization and a **hand-written coverage/exploration algorithm** — no off-the-shelf `nav2` planner involved.
 
-source ~/ros2_humble/install/setup.bash
+[![ROS 2](https://img.shields.io/badge/ROS_2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
+[![Gazebo](https://img.shields.io/badge/Gazebo-Classic_11-orange)](https://classic.gazebosim.org/)
+[![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-if the project in not in wsl, need to turn on automount in wsl config:
-Fix — add an [automount] section to /etc/wsl.conf:
-sudo tee -a /etc/wsl.conf > /dev/null <<'EOF'
+## Demo
 
-[automount]
-options = "metadata,umask=22,fmask=11"
-EOF
+> 🎥 GIF/screenshot of Gazebo + RViz coming soon.
 
-then run:
+## Overview
+
+Penguin is a from-scratch differential-drive robot (xacro/URDF description, `ros2_control`-based drivetrain, simulated 2D lidar) that runs a full mapping-then-navigation workflow entirely in simulation:
+
+1. **Build a map** — drive the robot around a custom Gazebo world with keyboard teleop while `slam_toolbox` builds an occupancy grid map from lidar scans.
+2. **Autonomously explore** — reload that saved map, localize against it with AMCL, and let a custom greedy coverage algorithm systematically drive the robot to every unvisited, reachable cell — computing its own swept-rectangle collision checks against the raw occupancy grid rather than delegating to `nav2`'s planner/controller stack.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph P1["Phase 1 — Mapping"]
+        direction TB
+        A1[Teleop keyboard] -->|cmd_vel| B1[ros2_control<br/>DiffDriveController]
+        B1 -->|drives| C1[Gazebo simulation<br/>+ lidar plugin]
+        C1 -->|/scan| D1[slam_toolbox]
+        D1 -->|/map| E1[map_saver]
+    end
+
+    subgraph P2["Phase 2 — Autonomous exploration"]
+        direction TB
+        F2[map_server] -->|/map| G2[AMCL]
+        C2[Gazebo simulation<br/>+ lidar plugin] -->|/scan| G2
+        G2 -->|/amcl_pose| H2[Custom exploration<br/>node]
+        H2 -->|cmd_vel| B2[ros2_control<br/>DiffDriveController]
+        B2 -->|drives| C2
+    end
+
+    E1 -. saved .pgm/.yaml .-> F2
+```
+
+See [`docs/deep-dive.md`](docs/deep-dive.md) for a component-by-component breakdown of *why* each piece of this pipeline works the way it does — `ros2_control`'s hardware abstraction, why the robot needs both an `odom` and `map` frame, how `slam_toolbox` builds the map, etc.
+
+## Key features
+
+- **Custom robot description** (`xacro`) — differential-drive chassis with two driven wheels, two casters, and a simulated 2D lidar, with full visual/collision/inertial properties per link.
+- **`ros2_control`-based drivetrain** — `DiffDriveController` + `JointStateBroadcaster` running against a `gazebo_ros2_control` hardware interface, the same interface a real hardware driver would implement.
+- **SLAM mapping** via `slam_toolbox` (scan matching + pose-graph loop closure).
+- **AMCL localization** against the saved map for the autonomous phase.
+- **A hand-rolled exploration algorithm** (`scripts/`) — reads AMCL's live pose, checks four cardinal directions against the raw occupancy grid via a custom swept-rectangle point-in-polygon collision test, and prioritizes unvisited, reachable cells to systematically cover the whole map.
+
+## Tech stack
+
+`ROS 2 Humble` · `Gazebo Classic 11` · `Python (rclpy)` · `xacro`/`URDF` · `slam_toolbox` · `Nav2 (map_server + AMCL)` · `Ceres Solver`
+
+## Getting started
+
+### Prerequisites
+
+- Ubuntu 22.04 (native or WSL2)
+- [ROS 2 Humble Desktop](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)
+
+> **Running in WSL2?** If `colcon build` fails with `configure_file: Operation not permitted`, see the WSL2 note in [`docs/deep-dive.md`](docs/deep-dive.md#debugging-notes-worth-remembering) — it's a one-line `/etc/wsl.conf` fix.
+
+### Installation
+
+```bash
+git clone https://github.com/PenguinInTheSky/Penguin.git
+cd Penguin
+
+# Dependencies not bundled with ros-desktop
+sudo apt install ros-humble-xacro ros-humble-joint-state-publisher-gui \
+                  ros-humble-gazebo-ros-pkgs ros-humble-gazebo-ros2-control \
+                  ros-humble-ros2-controllers ros-humble-slam-toolbox \
+                  ros-humble-nav2-map-server ros-humble-nav2-bringup \
+                  ros-humble-teleop-twist-keyboard
+
 colcon build --symlink-install
-
-3. Launch RViz2
 source install/setup.bash
-sudo apt install ros-humble-xacro
-sudo apt install ros-humble-joint-state-publisher-gui
+```
+
+> If RViz/Gazebo renders a black screen (common under WSLg), run `export LIBGL_ALWAYS_SOFTWARE=1` before launching.
+
+## Usage
+
+### View the robot model only
+
+```bash
 ros2 launch Penguin launch_rviz.launch.py
-hardware acceleration stops rviz from working if our system uses the Mesa graphic drivers, to disable hardware use:
-export LIBGL_ALWAYS_SOFTWARE = 1
+```
 
-4. Build Gazebo world
+### Phase 1 — build a map
 
-5. Launch Gazebo and use slam_toolbox and teleop to produce map
-sudo apt install ros-humble-gazebo-ros-pkgs
-sudo apt install ros-humble-gazebo-ros2-control
+Four terminals (each needs `source install/setup.bash`):
 
-config.mapper_params_online_async.yaml
-mode: mapping
+```bash
+# 1. Gazebo + robot
+ros2 launch Penguin launch_gazebo_build_map.launch.py
 
-sudo apt install ros-humble-slam-toolbox
-sudo apt install ros-humble-nav2-map-server
+# 2. SLAM
+ros2 launch slam_toolbox online_async_launch.py \
+  params_file:=$(ros2 pkg prefix Penguin)/share/Penguin/config/mapper_params_online_async.yaml
 
-sudo apt install ros-humble-ros2-controllers
+# 3. Drive it around
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/diff_cont/cmd_vel_unstamped
 
-Don't forget to source:
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-export LIBGL_ALWAYS_SOFTWARE=1
-Run these in parallel:
-Gazebo + robot launch: ros2 launch Penguin launch_gazebo_build_map.launch.py
-SLAM: ros2 launch slam_toolbox online_async_launch.py params_file:=$(ros2 pkg prefix Penguin)/share/Penguin/config/mapper_params_online_async.yaml
-teleop (drive robot around): ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/diff_cont/cmd_vel_unstamped
-launch rviz to track map building: rviz2 -d install/Penguin/share/Penguin/config/view_map_build.rviz
+# 4. (optional) watch the map build live
+rviz2 -d install/Penguin/share/Penguin/config/view.rviz
+```
 
-Save the map once complete in a new terminal:
+Once you've covered the space, save the map:
+
+```bash
 ros2 run nav2_map_server map_saver_cli -f small_room_saved
+```
 
-6. Launch Gazebo, use the map, use the algorithm to move robot around the room
-sudo apt install ros-humble-nav2-bringup
-That package ships localization_launch.py, which is exactly the right granularity for you: it brings up just map_server + amcl + a lifecycle_manager to auto-activate both 
+### Phase 2 — autonomous exploration
 
-config.mapper_params_online_async.yaml
-mode: localisation
+Two terminals:
 
-two terminals:
-Terminal 1: 
+```bash
+# 1. Gazebo + robot + the exploration node
 ros2 launch Penguin launch_gazebo.launch.py
 
-Terminal 2:  localization (map_server + amcl)
+# 2. Localization against the saved map
 ros2 launch nav2_bringup localization_launch.py \
   map:=$(ros2 pkg prefix Penguin)/share/Penguin/maps/small_room/small_room_saved.yaml \
   use_sim_time:=true
+```
 
-map_server publishes /map, amcl starts publishing /amcl_pose and the map→odom correction
+The robot seeds AMCL's initial pose automatically, then drives itself around the room, prioritizing unexplored territory until the whole map is covered.
 
-Q1: why do we have to define inertial in xacro for links?
+## Project structure
 
-<visual> — what the renderer (RViz, Gazebo GUI) draws.
-<collision> — the geometry the physics engine uses for contact/collision detection.
-<inertial> — mass and moment-of-inertia (the 3×3 inertia tensor) used by the dynamics solver.
+```
+description/     xacro/URDF: chassis, wheels, lidar, ros2_control interfaces
+worlds/          Gazebo world files
+config/          controller, SLAM, and RViz configs
+launch/          launch files for each phase
+scripts/         custom exploration algorithm (map parsing, geometry, driver node)
+maps/            saved occupancy grid maps
+docs/            deep-dive notes on how each subsystem works
+```
 
-If you omit <inertial>, most simulators (Gazebo, Bullet, DART, etc.) default the link's mass to 0 (or some engines silently substitute a tiny placeholder value). A massless link is physically meaningless to the solver
+## Challenges & what I learned
 
-Q2: how does the lidar work?
+- **WSL2 file permissions.** Building from a Windows-drive path (`/mnt/c/...`) failed with cryptic `Operation not permitted` errors from CMake — traced it to WSL2's `DrvFs` mount faking Unix permissions by default. Fixed at the mount-option level (`metadata` flag in `/etc/wsl.conf`) rather than moving the whole project.
+- **Debugging a silent `ros2_control` topic mismatch.** Teleop published to `/cmd_vel`, but the robot didn't move and threw no errors. Used `ros2 topic info --verbose` to spot `DiffDriveController` was actually listening on `diff_cont/cmd_vel_unstamped` — a controller-relative topic, not the bare default.
+- **Found and fixed a geometry bug** in the custom collision-check algorithm: a misplaced parenthesis meant one branch of the swept-rectangle point-in-polygon test called a helper function with a missing required argument, crashing obstacle avoidance for a narrow range of robot orientations.
 
-A plugin (.so file) is a shared library, Gazebo loads and runs a plugin inside its own process, a plugin is not part of ROS node graph
+## Future improvements
 
-For the lidar:
-Gazebo parses the <gazebo> block in the URDF/xacro and sees <sensor type="ray">, and so it creates a sensor with the defined properties
-Gazebo then sees the plugin defined and dynamically loads that library into its own process (using dlopen), then call its init function with config defined in <ros> and <frame_name>
-The plugin code reads the Gazebo's sensor data on every update, publish them as sensor_msgs/msg/LaserScan into /scan topic
+- Add a proper demo GIF/video.
+- Generalize the exploration algorithm beyond a single room layout.
+- Add automated tests for the map/geometry utilities in `scripts/`.
 
-Contrast this with a real lidar: a separate ROS driver node runs as its own process talking to the hardware over serial/USB, which also publishs LaserScan on a topic.
+## License
 
-Simulation: plugin
-Real-life: ROS diver node
-
-Q3: how does ros2_control work?
-
-the gazebo plugin initialises a controller_manager, and this reads <ros2_control> and load the hardware interface plugin (which reads and writes to command and state interfaces and translate commands into robot motions), and take claims of the specified command/state interfaces declared per joint, the controller_manager has a resource manager that hold these in its resource registry, the controller_manager reads the yaml files to figure out the controllers that it controls, at eah time fram,e these controllers read/write from/to the state/commands interfaces, does its own thing, in order to power the robot motion, and the controller_manager makes sure that no two controllers write to the same command interface
-
-Q4: what does robot_state_publisher actually do?
-
-it parses your URDF once at startup, and continuously publishes the TF tree — a transform for every link relative to its parent. For fixed joints (like your lidar_joint), the transform is constant and gets published immediately without needing any joint state. For movable joints (left_wheel_joint, right_wheel_joint), it needs the live angle from /joint_states to compute the current transform — which is exactly why it depends on joint_state_broadcaster.
-
-Q5: is JointStateBroadcaster really needed?
-
-Caveat worth flagging though: dropping joint_state_broadcaster entirely means the wheel joints' TF (visual rotation of the wheel links) never publishes — harmless if nothing hangs off the wheels in your tree (yours don't — wheels are leaf links) and nothing else subscribes to /joint_states. But it's a real gap if you ever add anything downstream of a wheel, or if some other tool/diagnostic node expects /joint_states to include wheel data. diff_drive_controller itself doesn't care either way — as established, it reads wheel state straight from the claimed state interfaces, not via the /joint_states topic.
-
-q6: what is teleop used for?
-
-it is used for manual control of the robot once the world model is set up, so that it can go around the room , use slam to build a map
-
-Q7: How does slam actually work?
-
-Input: subscribes to /scan (your LaserScan from the lidar Gazebo plugin, per scan_topic: /scan) and the TF tree (odom_frame: odom, base_frame: base_footprint) that robot_state_publisher + diff_cont's odometry provide.
-
-Scan matching: each new laser scan is compared against the existing map (or recent scans) to figure out how much the robot has actually moved, correcting for wheel-odometry drift. This uses the "Correlation Parameters" in your config — correlation_search_space_dimension/resolution define how far/finely it searches for the best-fit alignment.
-
-Map building: as scan-matched poses accumulate, it rasterizes them into an occupancy grid (resolution: 0.05 → 5cm per cell) — the classic black/white/gray map (occupied/free/unknown).
-
-Pose graph + loop closure: it maintains a graph of robot poses linked by relative constraints from scan matches. When the robot revisits a previously-mapped area (do_loop_closing: true), it detects the match (loop_search_maximum_distance: 3.0) and runs a graph optimization (via Ceres) to correct accumulated drift across the whole trajectory — this is what prevents the map from becoming a warped mess on long runs.
-
-Output: publishes the map frame and the map → odom TF correction (filling in the top of the TF chain we discussed: map → odom → base_link → lidar), and the occupancy grid on /map.
-
-Q8: why both odom and map?
-Why both are kept, not just one:
-Local controllers / obstacle avoidance that need smooth, jitter-free, low-latency pose use odom — a discrete correction jump mid-motion would be disruptive.
-
-Long-term navigation goals, global path planning, and "where is the robot really in this building" use map, since odom alone would have the robot's belief silently diverging from reality over a long run.
-
-diff_cont owns and publishes odom → base_link — computed purely from wheel encoder dead reckoning, updated every control cycle (100Hz), smooth but drifting.
-
-slam_toolbox owns and publishes map → odom — computed by matching /scan against the map, updated whenever a scan match lands, jumpy but globally drift-corrected.
-
-Chain them and you get the full pose: map → odom → base_link — a pose that's globally accurate (thanks to the map→odom correction) while still being smooth for control purposes (thanks to odom→base_link never jumping). Each node only ever touches its own link in the chain — diff_cont has zero knowledge of the map, slam_toolbox never touches odom→base_link directly, it only corrects the frame above it. That separation is exactly what makes the REP 105 convention work — every package publishes one link, tf2 composes the whole chain for anyone downstream (like nav2) that needs the full base_link pose in map frame.
-
-Q9: how do joint_state_publisher know to just show control for left and right wheels?
-
-Confirmed straight from robot_core.xacro — it's simply filtering by joint type:
-
-left_wheel_joint   type="continuous"
-right_wheel_joint  type="continuous"
-
-footprint_joint          type="fixed"
-base_to_chassis          type="fixed"
-
-Q10: what does nav2_map_server do?
-
-nav2_map_server is a small package with two complementary tools — you're only using half of it right now:
-
-map_saver (what we're using — map_saver_cli): subscribes to the live /map topic that slam_toolbox is publishing while you drive around, and serializes it to disk as a .pgm (a grayscale image — white=free, black=occupied, gray=unknown) + a .yaml sidecar file (metadata: resolution, origin coordinates, occupancy thresholds). That's the format your existing maps/small_room/small_room_saved.pgm/.yaml are in.
-
-map_server (the other half, not used yet — this is Phase 2, per what you described earlier): does the reverse — loads a saved .pgm/.yaml pair from disk and republishes it as a live /map topic. This is what you'd run instead of slam_toolbox once you're navigating with a pre-built map: map_server provides the static /map, and AMCL (or slam_toolbox in mode: localches live scans against itto localize, rather than building a new map.
+[Apache 2.0](LICENSE)
